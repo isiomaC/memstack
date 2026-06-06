@@ -1,53 +1,56 @@
 # MemStack
 
-> Open-source AI memory framework — store, retrieve, summarize, and prune memories for LLM agents and games.
+> The open-source memory layer for AI agents — store, retrieve, summarize, and prune.
 
 [![npm version](https://img.shields.io/npm/v/@memstack/core)](https://www.npmjs.com/package/@memstack/core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-**MemStack** gives your AI agents persistent memory. It handles the full memory lifecycle — storing interactions, retrieving relevant context, summarizing old memories, pruning stale ones, tracking entity relationships, and managing quests/state. One method call (`process()`) orchestrates it all.
-
-Think of it as the open-source alternative to [Mem0](https://mem0.ai/), but with pluggable storage, multi-dimensional relationships, and quest tracking built in.
 
 ```bash
 npm install @memstack/core
 ```
 
+**The problem:** AI agents forget. Every interaction starts from zero. You either stuff everything into the context window (expensive, slow, degrades output quality) or the agent has no memory of past conversations.
+
+**What MemStack does:** A persistent memory pipeline that lives between your agent and the LLM. It stores every interaction, retrieves only what's relevant, summarizes old memories to save tokens, and prunes stale ones automatically. One method call, no infrastructure required.
+
+Think of it as the open-source alternative to [Mem0](https://mem0.ai/) — pluggable storage, bring your own LLM, zero vendor lock-in.
+
 ---
 
 ## Table of Contents
 
+- [Why MemStack](#why-memstack)
 - [Quick Start](#quick-start)
-- [Core Concepts](#core-concepts)
-  - [Memory](#memory)
-  - [Relationship](#relationship)
-  - [Quest](#quest)
-  - [Compiled Context](#compiled-context)
+- [The Memory Pipeline](#the-memory-pipeline)
+  - [Store](#1-store)
+  - [Retrieve](#2-retrieve)
+  - [Compile Context](#3-compile-context)
+  - [Summarize](#4-summarize)
+  - [Prune](#5-prune)
+- [Real-World Use Cases](#real-world-use-cases)
+  - [Support Agent](#support-agent)
+  - [RAG Pipeline](#rag-pipeline)
+  - [Multi-User Chatbot](#multi-user-chatbot)
+- [Memory Type Reference](#memory-type-reference)
+- [Retrieval Strategies](#retrieval-strategies)
+- [Embeddings](#embeddings)
 - [Adapters](#adapters)
   - [LLM Adapters](#llm-adapters)
   - [Embedding Adapters](#embedding-adapters)
   - [Storage Adapters](#storage-adapters)
-- [API Reference](#api-reference)
+- [Full API Reference](#full-api-reference)
   - [MemStack Client](#memstack-client)
   - [Memory Subsystem](#memory-subsystem)
-  - [Relationship Subsystem](#relationship-subsystem)
-  - [Quest Subsystem](#quest-subsystem)
   - [Export / Import](#export--import)
-  - [Health Checks](#health-checks)
+  - [Health & Close](#health--close)
 - [Configuration](#configuration)
 - [Advanced Usage](#advanced-usage)
   - [Custom Storage](#custom-storage)
-  - [Custom LLM Provider](#custom-llm-provider)
-  - [Custom Embedding Provider](#custom-embedding-provider)
+  - [Custom LLM / Embedding](#custom-llm--embedding)
   - [Event Hooks](#event-hooks)
-- [Memory Lifecycle](#memory-lifecycle)
-  - [Summarization](#summarization)
-  - [Pruning](#pruning)
-  - [Embeddings](#embeddings)
+- [Optional: Relationships & Quests](#optional-relationships--quests)
 - [Development](#development)
-  - [Setup](#setup)
-  - [Running Tests](#running-tests)
-  - [Building](#building)
+  - [Setup & Tests](#setup--tests)
   - [Debugging](#debugging)
 - [Publishing to npm](#publishing-to-npm)
 - [Contributing](#contributing)
@@ -55,157 +58,398 @@ npm install @memstack/core
 
 ---
 
+## Why MemStack
+
+**LLMs have context windows, not memory.** The difference matters.
+
+| Approach | Problem |
+|----------|---------|
+| **Stuff everything in context** | Cost is O(n²). 100 conversations = thousands of tokens = dollars per call. Quality degrades from "lost in the middle" effect. |
+| **Use a vector DB directly** | You get similarity search. You don't get summarization, pruning, recency weighting, deduplication, or token budget management. You're building the pipeline yourself. |
+| **Use Mem0** | Proprietary, cloud-only with their hosted API. You don't control where your data lives. |
+| **Use MemStack** | Full pipeline. Pluggable everything. Your data, your infrastructure. Open source. |
+
+**What MemStack handles that raw vector DBs don't:**
+
+- **Summarization** — compress 100 old interactions into one paragraph, keep meaning, save tokens
+- **Recency weighting** — recent memories matter more; MemStack sorts them higher
+- **Importance scoring** — not all memories are equal; high-importance ones survive pruning
+- **Deduplication** — identical or near-identical memories are collapsed in context assembly
+- **Token budget** — `compileContext()` tells you how many tokens you're spending before the LLM call
+- **Memory-type routing** — interactions, summaries, observations treated differently at retrieval time
+- **Auto-pruning** — old, low-importance memories clean themselves up
+
+---
+
 ## Quick Start
 
 ```typescript
-import { MemStack, InMemoryStorage, OpenAILLMAdapter, OpenAIEmbeddingAdapter } from "@memstack/core";
+import { MemStack, OpenAILLMAdapter, OpenAIEmbeddingAdapter } from "@memstack/core";
 
-// 1. Set up adapters
 const memstack = new MemStack({
   llm: new OpenAILLMAdapter({ apiKey: process.env.OPENAI_API_KEY! }),
   embedding: new OpenAIEmbeddingAdapter({ apiKey: process.env.OPENAI_API_KEY! }),
-  storage: new InMemoryStorage(),
 });
 
-// 2. Store an interaction — one call does memory + relationships + quests
-const result = await memstack.process({
-  actorId: "npc_elena",
-  content: "The player saved my cat from the goblins.",
-  targetId: "player_1",
-  emotionalValence: 0.8,
-  tags: ["quest", "rescue"],
-  relationshipDelta: { affinity: 20, trust: 15 },
+// 1. Store what happened
+await memstack.memory.store({
+  actorId: "support-bot-42",
+  content: "User reports login failing with error 503 on Chrome 125.",
+  tags: ["login", "bug", "chrome"],
+  importance: 0.8,
 });
 
-console.log(result.memory.id);           // "mem_..."
-console.log(result.relationshipUpdate);  // { previous: null, current: { affinity: 20, ... } }
+// 2. Later, retrieve relevant context
+const memories = await memstack.memory.retrieve({
+  actorId: "support-bot-42",
+  query: "login error",
+  strategy: "hybrid",
+});
 
-// 3. Ask what this NPC remembers — get an LLM-ready context block
-const ctx = await memstack.memory.compileContext({ actorId: "npc_elena" });
-console.log(ctx.systemPrompt);
-// ## Important Memories
-// - The player saved my cat from the goblins. (interaction, importance: 0.50)
-// 
-// ## Recent Interactions
-// - The player saved my cat from the goblins.
-console.log(ctx.tokenEstimate);  // ~125
+// 3. Inject into your LLM call
+const ctx = await memstack.memory.compileContext({
+  actorId: "support-bot-42",
+  maxTokens: 2000,
+});
+
+const llmResponse = await llm.complete({
+  system: `You are a support bot. Here is what you remember:\n${ctx.systemPrompt}`,
+  user: "The user is back and still can't log in. What do you do?",
+});
+
+// 4. Every 100 interactions, summarization kicks in automatically.
+// Old interactions are compressed into a paragraph. Token costs stay flat.
 ```
 
 ---
 
-## Core Concepts
+## The Memory Pipeline
 
-### Memory
+MemStack's core is a five-stage pipeline. Each stage can be used independently.
 
-A `Memory` represents one unit of knowledge — an interaction, an observation, a summary, or gossip. Every memory is owned by an actor (NPC, agent, user).
+### 1. Store
+
+Every agent interaction becomes a `Memory` with metadata that controls how it's retrieved, summarized, and pruned later.
 
 ```typescript
 interface Memory {
-  id: string;                    // Auto-generated, e.g. "mem_lx4g7a_abc123de"
-  actorId: string;               // Who this memory belongs to
-  memoryType: "interaction" | "summary" | "observation" | "gossip";
-  content: string;               // The actual text
-  importance: number;            // 0–1, affects retrieval order and pruning survival
-  emotionalValence: number;      // -1 (negative) to 1 (positive)
-  tags: string[];                // Auto or manually tagged: "combat", "quest", "trade"
-  embedding?: number[];          // Populated if you configure an embedding adapter
-  sourceId?: string;             // Links back to the originating interaction
-  metadata?: Record<string, unknown>;  // Your custom data
-  expiresAt?: Date;              // Auto-pruned after this time
-  createdAt: Date;
-}
-```
-
-**Memory types:**
-| Type | Purpose |
-|------|---------|
-| `interaction` | Standard interaction — the default. Bulk of your memories. |
-| `summary` | Compressed representation of N old interactions (created by `summarize()`). |
-| `observation` | Passive observation — something the actor noticed without interacting. |
-| `gossip` | Information spread between entities — used for world memory. |
-
-### Relationship
-
-A `Relationship` tracks how one entity feels about another. It's **directed** — NPC Elena's feelings about the player are tracked separately from the player's feelings about Elena.
-
-```typescript
-interface Relationship {
-  actorA: string;      // Source entity (the one who feels)
-  actorB: string;      // Target entity (the one being felt about)
-  affinity: number;    // -100 (hate) to 100 (love)
-  trust: number;       // -100 to 100
-  fear: number;        // 0 to 100
-  respect: number;     // 0 to 100
-  stage: RelationshipStage;  // Auto-calculated: stranger → acquaintance → friend → ...
-  interactionCount: number;  // How many times they've interacted
-  historySummary?: string;   // LLM-generated summary of relationship history
-  tags: string[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-```
-
-**Relationship stages** (auto-derived from `affinity`):
-
-| Stage | Affinity Range |
-|-------|---------------|
-| `stranger` | 0–10 |
-| `acquaintance` | 10–30 |
-| `friend` | 30–60 |
-| `close_friend` | 60–80 |
-| `romantic` | 80–100 |
-| `rival` | -30 to -60 |
-| `nemesis` | -60 to -100 |
-
-### Quest
-
-A `Quest` tracks objectives, progress, rewards, and prerequisites. Full lifecycle: `offered` → `accepted` → `in_progress` → `completed` | `failed` | `expired`.
-
-```typescript
-interface Quest {
   id: string;
-  title: string;
-  description: string;
-  giverId: string;         // NPC who gave the quest
-  takerId?: string;        // Player who accepted it
-  status: "offered" | "accepted" | "in_progress" | "completed" | "failed" | "expired";
-  objectives: QuestObjective[];
-  rewards?: { gold?: number; items?: string[]; relationshipBonus?: Record<string, number> };
-  timeLimit?: Date;         // Auto-fails if past deadline
-  prerequisites?: string[]; // Quest IDs that must be completed first
+  actorId: string;               // Who this memory belongs to (user ID, agent ID, session ID)
+  memoryType: MemoryType;        // "interaction" | "summary" | "observation"
+  content: string;               // The actual text
+  importance: number;            // 0-1 — higher = survives pruning, ranks higher in retrieval
+  emotionalValence: number;      // -1 to 1 — for tone-aware retrieval
+  tags: string[];                // Filter by tag: "bug", "billing", "urgent", etc.
+  embedding?: number[];          // Computed automatically if embedding adapter is configured
+  metadata?: Record<string, unknown>;  // Your custom fields
+  expiresAt?: Date;              // Auto-pruned after this date
+  sourceId?: string;             // Link back to the originating event
   createdAt: Date;
-  updatedAt: Date;
 }
 ```
 
-### Compiled Context
-
-The output of `compileContext()` — everything you need to inject into an LLM prompt:
-
 ```typescript
-interface CompiledContext {
-  systemPrompt: string;          // Assembled prompt with memories and relationships
-  recentMemories: Memory[];      // Last N interactions
-  importantMemories: Memory[];   // High-importance, deduplicated
-  relationships: Relationship[]; // Relevant relationship data
-  activeQuests: Quest[];         // In-progress quests
-  tokenEstimate: number;         // Approximate token count
-}
-```
-
-Use `compileContext()` as your prompt's system message:
-
-```typescript
-const ctx = await memstack.memory.compileContext({
-  actorId: "npc_elena",
-  maxTokens: 2000,
-  includeRelationships: true,
-  includeQuests: true,
+// Simple store
+await ms.memory.store({
+  actorId: "agent-7",
+  content: "Customer asked about refund policy for Q2 purchases.",
+  tags: ["billing", "refund"],
 });
 
+// Batch store — embeddings are batched into one API call for efficiency
+await ms.memory.storeBatch([
+  { actorId: "agent-7", content: "First interaction" },
+  { actorId: "agent-7", content: "Second interaction" },
+  { actorId: "agent-7", content: "Third interaction" },
+]);
+```
+
+### 2. Retrieve
+
+Pull back what's relevant — by keyword, by meaning (semantic), by recency, or by importance.
+
+```typescript
+const memories = await ms.memory.retrieve({
+  actorId: "agent-7",              // Scope to one actor
+  query: "refund policy",          // What to search for
+  strategy: "hybrid",              // How to rank: "recent" | "important" | "semantic" | "hybrid"
+  limit: 10,                       // Max results
+  memoryTypes: ["interaction"],    // Only certain types
+  tags: ["billing"],               // Only certain tags
+});
+```
+
+**Strategy behavior:**
+
+| Strategy | Sorts by | Requires embeddings | Best for |
+|----------|----------|--------------------|----------|
+| `recent` | Newest first | No | Knowing what just happened |
+| `important` | Highest importance first | No | Filtering noise, keeping signal |
+| `semantic` | Cosine similarity to query | Yes | "Find memories about X" |
+| `hybrid` | Semantic + importance blend | Yes | Best of both worlds |
+
+No embedding adapter? `semantic` and `hybrid` fall back to keyword matching + importance sort. No API costs, just less precise.
+
+### 3. Compile Context
+
+The killer feature. `compileContext()` takes the retrieval results and assembles an LLM-ready system prompt — deduplicated, sorted by recency and importance, with a token estimate so you know the cost before calling the LLM.
+
+```typescript
+const ctx = await ms.memory.compileContext({
+  actorId: "agent-7",
+  maxTokens: 2000,               // Budget — assembler stops when it hits this
+  memoryTypes: ["interaction", "summary"],
+});
+
+// ctx.systemPrompt:
+// ## Important Memories
+// - The customer has been attempting login for 3 days. (importance: 0.85)
+// - Refund was processed for order #4521 on Jan 12. (importance: 0.72)
+// 
+// ## Recent Interactions
+// - Customer asked about refund policy for Q2 purchases.
+// - Customer reported login error 503 on Chrome 125.
+
+console.log(ctx.tokenEstimate);  // ~280
+
+// Inject into your LLM call
 const response = await llm.complete({
   system: ctx.systemPrompt,
-  user: "The player approaches you. What do you say?",
+  user: userMessage,
+});
+```
+
+`compileContext()` is the difference between "we have a vector DB" and "we have agent memory." It handles deduplication, token budgeting, and the recent-vs-important split that makes context useful.
+
+### 4. Summarize
+
+When an actor has hundreds of interactions, retrieval gets expensive and context gets bloated. Summarization compresses old interactions into a single paragraph using the configured LLM.
+
+```typescript
+const { summary, deletedCount } = await ms.memory.summarize({
+  actorId: "agent-7",
+  olderThan: new Date(Date.now() - 7 * 86400000),  // Older than 7 days
+  skipMostRecent: 10,        // Never touch the 10 most recent
+  targetCount: 50,           // Summarize at most 50 memories
+  memoryTypes: ["interaction"],
+  keepOriginals: false,      // Delete originals after summary
+});
+
+// summary.content:
+// "Over the past week, the customer reported recurring login failures (error 503)
+//  on Chrome 125. Multiple troubleshooting attempts including cache clearing and 
+//  password reset were unsuccessful. A refund was processed for order #4521."
+
+console.log(deletedCount);   // 47 — 47 interactions compressed into 1 summary memory
+```
+
+**Auto-summarization:** Set `summarizationThreshold` in config (default: 100). Every 100th interaction for an actor triggers summarization automatically.
+
+**Warning:** `keepOriginals: false` deletes the summarized memories. Set `keepOriginals: true` to preserve them alongside the summary.
+
+**Custom summarization prompt:**
+
+```typescript
+import { Summarizer } from "@memstack/core";
+
+const summarizer = new Summarizer(llm, 
+  "You are an enterprise support memory compressor. Highlight: customer name, 
+   product, severity, resolution status, and any open issues."
+);
+```
+
+### 5. Prune
+
+Not all memories deserve to live forever. Pruning removes low-value memories to keep storage and retrieval fast.
+
+```typescript
+// Remove memories older than 30 days
+await ms.memory.prune({ type: "byAge", maxAge: 30 * 86400000 });
+
+// Keep only memories above importance 0.3
+await ms.memory.prune({ type: "byImportance", minImportance: 0.3 });
+
+// Keep at most 500 memories per actor
+await ms.memory.prune({ type: "byCount", maxPerActor: 500 });
+
+// Remove specific types
+await ms.memory.prune({ type: "byType", memoryTypes: ["observation"] });
+
+// Custom logic
+await ms.memory.prune({
+  type: "custom",
+  predicate: (memory) => memory.content.includes("[RESOLVED]"),
+});
+
+// Dry run first — see what would be removed
+const { wouldPrune, count } = await ms.memory.dryRunPrune({
+  type: "byAge",
+  maxAge: 86400000,
+});
+console.log(`Would remove ${count} memories:`, wouldPrune);
+```
+
+Auto-prune on every `process()` call by setting `pruneStrategy` in config:
+
+```typescript
+const ms = new MemStack({
+  llm,
+  defaults: {
+    pruneStrategy: { type: "byImportance", minImportance: 0.05 },
+  },
+});
+```
+
+---
+
+## Real-World Use Cases
+
+### Support Agent
+
+```typescript
+// Every customer message becomes a memory
+async function handleMessage(customerId: string, message: string) {
+  await ms.memory.store({
+    actorId: `customer:${customerId}`,
+    content: message,
+    importance: detectUrgency(message), // NLP heuristic or LLM call
+    tags: classifyIntent(message),      // "billing", "bug", "account", etc.
+  });
+
+  // Retrieve everything relevant to this customer's history
+  const ctx = await ms.memory.compileContext({
+    actorId: `customer:${customerId}`,
+    maxTokens: 1500,
+  });
+
+  const response = await llm.complete({
+    system: `You are a support agent. Customer history:\n${ctx.systemPrompt}`,
+    user: message,
+  });
+
+  return response.text;
+}
+
+// Every 100th interaction, old history auto-compresses.
+// A customer with 10,000 messages still fits in a $0.02 LLM call.
+```
+
+### RAG Pipeline
+
+```typescript
+// Index documents as observation memories
+for (const doc of documents) {
+  await ms.memory.store({
+    actorId: "knowledge-base",
+    content: doc.text,
+    memoryType: "observation",
+    metadata: { source: doc.url, section: doc.section },
+  });
+}
+
+// Query with semantic search
+const relevantDocs = await ms.memory.retrieve({
+  actorId: "knowledge-base",
+  query: "How does authentication work?",
+  strategy: "semantic",
+  limit: 5,
+});
+
+const ctx = await ms.memory.compileContext({
+  actorId: "knowledge-base",
+  memoryTypes: ["observation"],
+});
+
+// Prompt the LLM with retrieved context
+const answer = await llm.complete({
+  system: `Answer using only these documents:\n${ctx.systemPrompt}`,
+  user: "How does authentication work?",
+});
+```
+
+### Multi-User Chatbot
+
+```typescript
+// Each user gets their own memory space
+async function chat(userId: string, message: string) {
+  await ms.memory.store({
+    actorId: userId,
+    content: message,
+  });
+
+  const ctx = await ms.memory.compileContext({
+    actorId: userId,
+    maxTokens: 1000,
+  });
+
+  return llm.complete({
+    system: `You are a friendly assistant. Conversation history with this user:\n${ctx.systemPrompt}`,
+    user: message,
+  });
+}
+
+// Get stats
+const total = await ms.memory.count();
+const userCount = await ms.memory.count({ actorId: "user-42" });
+```
+
+---
+
+## Memory Type Reference
+
+| Type | Purpose | Example |
+|------|---------|---------|
+| `interaction` | Default. Direct exchanges between agent and user/other agent. | "User asked about billing." |
+| `summary` | Compressed collection of old interactions. Created by `summarize()`. | "Over 3 weeks, user reported 5 login failures..." |
+| `observation` | Passive knowledge — facts, documents, things the agent knows but didn't interact with. | "Company refund policy is 30 days from purchase." |
+| `gossip` | Information about third parties. For multi-agent systems. | "Agent-B told me the user is a power user." |
+
+Types control retrieval behavior — `compileContext()` treats `interaction` and `summary` differently from `observation`. Use types to separate "what happened" from "what I know."
+
+---
+
+## Retrieval Strategies
+
+Four strategies, each with a purpose:
+
+```typescript
+// "What just happened?" — most recent first
+await ms.memory.retrieve({ actorId: "x", strategy: "recent", limit: 3 });
+
+// "What matters most?" — highest importance, ignoring age
+await ms.memory.retrieve({ actorId: "x", strategy: "important" });
+
+// "What relates to this query?" — cosine similarity search (needs embeddings)
+await ms.memory.retrieve({ actorId: "x", query: "login bug", strategy: "semantic" });
+
+// "Balance relevance and importance" — semantic + importance blend
+await ms.memory.retrieve({ actorId: "x", query: "login bug", strategy: "hybrid" });
+```
+
+**Choosing a strategy:**
+- Use `recent` for chatbots, ongoing conversations, anything time-sensitive
+- Use `important` for long-running agents where signal-to-noise matters
+- Use `semantic` for RAG, document search, knowledge base queries
+- Use `hybrid` for most agent memory — it balances meaning with significance
+
+---
+
+## Embeddings
+
+Embeddings power semantic search. They're optional — without them, retrieval uses keyword matching.
+
+**With embeddings** (configure an `EmbeddingProvider`): each `store()` computes a vector. `retrieve()` with `"semantic"` or `"hybrid"` uses cosine similarity ranking.
+
+**Without embeddings**: everything still works — retrieval falls back to importance + recency + keyword filters. No API costs, no setup.
+
+**Batch embedding:** `storeBatch()` sends all texts in one embedding API call, reducing cost and latency.
+
+```typescript
+// Disable auto-embedding if you only need keyword search
+const ms = new MemStack({
+  llm,
+  embedding: new OpenAIEmbeddingAdapter({ apiKey }),
+  defaults: { embedOnStore: false },
 });
 ```
 
@@ -213,106 +457,79 @@ const response = await llm.complete({
 
 ## Adapters
 
-MemStack is provider-agnostic. Everything is pluggable — bring your own LLM, embedding model, and storage backend.
+MemStack is provider-agnostic. Every boundary is an interface — bring your own LLM, embedding model, and storage backend.
 
 ### LLM Adapters
 
-LLM adapters are used by `summarize()` and `compileContext()`. Ship with OpenAI and Anthropic built-in.
-
-#### OpenAI
+Used by `summarize()` and `compileContext()`. Ships with OpenAI and Anthropic built-in.
 
 ```typescript
+// OpenAI
 import { OpenAILLMAdapter } from "@memstack/core";
-
 const llm = new OpenAILLMAdapter({
   apiKey: process.env.OPENAI_API_KEY!,
-  defaultModel: "gpt-4o-mini",     // optional, default
-  baseURL: "https://api.openai.com/v1", // optional, for proxies
+  defaultModel: "gpt-4o-mini",        // default
+  baseURL: "https://api.openai.com/v1", // for proxies like LiteLLM
 });
-```
 
-#### Anthropic
-
-```typescript
+// Anthropic
 import { AnthropicLLMAdapter } from "@memstack/core";
-
 const llm = new AnthropicLLMAdapter({
   apiKey: process.env.ANTHROPIC_API_KEY!,
   defaultModel: "claude-sonnet-4-5-20250929",
 });
-```
 
-#### Ollama (custom adapter example)
-
-```typescript
+// Ollama (custom — implement LLMProvider)
 import type { LLMProvider } from "@memstack/core";
-
 class OllamaAdapter implements LLMProvider {
   constructor(private baseURL = "http://localhost:11434") {}
-
-  async complete(request: { system: string; user: string; model?: string }) {
-    const response = await fetch(`${this.baseURL}/api/generate`, {
+  async complete(req: { system: string; user: string; model?: string }) {
+    const res = await fetch(`${this.baseURL}/api/generate`, {
       method: "POST",
-      body: JSON.stringify({
-        model: request.model ?? "llama3.2",
-        prompt: `${request.system}\n\n${request.user}`,
-        stream: false,
-      }),
+      body: JSON.stringify({ model: req.model ?? "llama3.2", prompt: `${req.system}\n\n${req.user}`, stream: false }),
     });
-    const data = await response.json();
-    return {
-      text: data.response,
-      tokens: { prompt: 0, completion: 0, total: 0 },
-    };
+    const data = await res.json() as { response: string };
+    return { text: data.response, tokens: { prompt: 0, completion: 0, total: 0 } };
   }
 }
 ```
 
 ### Embedding Adapters
 
-Embedding adapters are used for semantic retrieval (`strategy: "semantic"`). Ship with OpenAI built-in.
+Used by semantic retrieval. Ships with OpenAI built-in.
 
 ```typescript
 import { OpenAIEmbeddingAdapter } from "@memstack/core";
-
 const embedding = new OpenAIEmbeddingAdapter({
   apiKey: process.env.OPENAI_API_KEY!,
-  model: "text-embedding-3-small",  // default, 1536 dimensions
+  model: "text-embedding-3-small",  // 1536 dimensions (default)
   // model: "text-embedding-3-large", // 3072 dimensions
 });
 ```
 
-**Embeddings are optional.** Without an embedding adapter, retrieval uses keyword matching + importance/recency sorting. With embeddings, `strategy: "semantic"` or `"hybrid"` performs true semantic search.
-
 ### Storage Adapters
 
-Ship with `InMemoryStorage`. Build your own by implementing the `StorageProvider` interface for Postgres, Redis, filesystem, etc.
-
-#### InMemoryStorage (default, zero setup)
+Ships with `InMemoryStorage` (zero setup, data lost on restart). For production, implement `StorageProvider` for your database.
 
 ```typescript
 import { InMemoryStorage } from "@memstack/core";
-
 const storage = new InMemoryStorage();
-// All data lives in process memory — lost on restart.
-// Perfect for development, testing, and prototyping.
 ```
 
-#### Custom Storage (Postgres example)
+**Custom storage** — implement `StorageProvider`:
 
 ```typescript
-import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "@memstack/core";
-import type { Memory } from "@memstack/core";
+import type { StorageProvider, MemoryStoreInput } from "@memstack/core";
 
 class PostgresStorage implements StorageProvider {
-  async initialize() { /* create tables */ }
   async store(input: MemoryStoreInput): Promise<Memory> { /* INSERT */ }
-  async storeBatch(inputs: MemoryStoreInput[]): Promise<Memory[]> { /* batch INSERT */ }
-  async get(id: string): Promise<Memory | null> { /* SELECT by id */ }
-  async delete(id: string): Promise<void> { /* DELETE */ }
-  async deleteMany(ids: string[]): Promise<number> { /* DELETE WHERE id IN */ }
-  async retrieve(query: MemoryRetrieveQuery, embedding?: number[]): Promise<Memory[]> { /* SELECT with filters */ }
+  async get(id: string): Promise<Memory | null> { /* SELECT */ }
+  async retrieve(query: MemoryRetrieveQuery, embedding?: number[]): Promise<Memory[]> { /* SELECT + filters */ }
   async count(filter?: MemoryCountFilter): Promise<number> { /* SELECT COUNT */ }
+  async delete(id: string): Promise<void> { /* DELETE */ }
+  async deleteMany(ids: string[]): Promise<number> { /* DELETE batch */ }
+  async storeBatch(inputs: MemoryStoreInput[]): Promise<Memory[]> { /* INSERT batch */ }
+  async initialize(): Promise<void> { /* CREATE TABLE */ }
   async close(): Promise<void> { /* close pool */ }
 }
 ```
@@ -321,394 +538,107 @@ See `src/adapters/storage/memory.ts` for a complete reference implementation.
 
 ---
 
-## API Reference
+## Full API Reference
 
 ### MemStack Client
 
 ```typescript
 import { MemStack } from "@memstack/core";
 
-const ms = new MemStack({ llm: /* required */, embedding?: /* optional */, storage?: /* optional */ });
-```
-
-#### `ms.process(input)`
-
-The main method. One call stores a memory, updates relationships, checks quest triggers, and auto-summarizes/auto-prunes if thresholds are hit.
-
-```typescript
-const result = await ms.process({
-  actorId: string;             // Required — who is experiencing this
-  content: string;             // Required — what happened
-  memoryType?: MemoryType;     // Default: "interaction"
-  importance?: number;         // 0–1, auto-calculated if omitted
-  emotionalValence?: number;   // -1 to 1, auto-detected if omitted
-  tags?: string[];             // Auto-tagged if omitted
-  targetId?: string;           // If interacting with another entity
-  relationshipDelta?: {
-    affinity?: number;         // Delta, not absolute. +5 means "trust increased by 5"
-    trust?: number;
-    fear?: number;
-    respect?: number;
-  };
-  metadata?: Record<string, unknown>;
-  expiresAt?: Date;
+const ms = new MemStack({
+  llm: LLMProvider,                    // Required — for summarization
+  embedding?: EmbeddingProvider,       // Optional — for semantic search
+  storage?: StorageProvider,           // Optional — defaults to InMemoryStorage
+  defaults?: {
+    maxMemoriesPerActor?: number,      // Hard cap
+    summarizationThreshold?: number,   // Auto-summarize every N interactions. Default: 100
+    embedOnStore?: boolean,            // Auto-embed on store(). Default: true
+    pruneStrategy?: PruneStrategy,     // Auto-prune on every store(). Default: disabled
+    importanceDecayRate?: number,      // Importance decay per day. Default: 0.01
+  },
+  hooks?: {
+    onMemoryStored?: (memory: Memory) => void;
+    onMemoryPruned?: (ids: string[]) => void;
+    onSummaryCreated?: (summary: Memory, deletedCount: number) => void;
+  },
 });
-
-// Returns:
-interface ProcessResult {
-  memory: Memory;
-  relationshipUpdate?: { previous: Relationship; current: Relationship };
-  questTriggers?: Quest[];     // Quests advanced by this interaction
-  summaryCreated?: Memory;     // If summarization threshold was hit
-}
 ```
 
-#### `ms.export()` / `ms.import()`
+### Memory Subsystem
 
-Snapshot and restore full state:
+All methods accessible via `ms.memory.*`:
 
 ```typescript
-// Save everything
+// Store
+ms.memory.store(input: MemoryStoreInput): Promise<Memory>
+ms.memory.storeBatch(inputs: MemoryStoreInput[]): Promise<Memory[]>
+
+// Retrieve
+ms.memory.retrieve(query: MemoryRetrieveQuery): Promise<Memory[]>
+ms.memory.get(id: string): Promise<Memory | null>
+
+// Context assembly
+ms.memory.compileContext(options: ContextOptions): Promise<CompiledContext>
+
+// Lifecycle
+ms.memory.summarize(options: SummarizeOptions): Promise<{ summary: Memory; deletedCount: number }>
+ms.memory.prune(strategy: PruneStrategy): Promise<{ pruned: string[]; count: number }>
+ms.memory.dryRunPrune(strategy: PruneStrategy): Promise<{ wouldPrune: string[]; count: number }>
+
+// Management
+ms.memory.count(filter?: MemoryCountFilter): Promise<number>
+ms.memory.delete(id: string): Promise<void>
+ms.memory.deleteMany(ids: string[]): Promise<number>
+ms.memory.touch(id: string): Promise<void>  // bump recency without changing content
+```
+
+### Export / Import
+
+Snapshot and restore full state for persistence, backups, or migration:
+
+```typescript
+// Save
 const snapshot = await ms.export();
-fs.writeFileSync("state.json", JSON.stringify(snapshot));
+fs.writeFileSync("state.json", JSON.stringify(snapshot, null, 2));
 
 // Restore
 const data = JSON.parse(fs.readFileSync("state.json", "utf-8"));
-await ms.import(data);
+await ms2.import(data);
 ```
 
-#### `ms.health()`
-
-Check if all adapters are reachable:
+### Health & Close
 
 ```typescript
 const status = await ms.health();
 // { storage: true, llm: true, embedding: true }
-```
 
-#### `ms.close()`
-
-Graceful shutdown — closes storage connections, embeds any pending memories:
-
-```typescript
-await ms.close();
-```
-
----
-
-### Memory Subsystem
-
-Access via `ms.memory.*`:
-
-#### `store(input)` / `storeBatch(inputs)`
-
-```typescript
-const mem = await ms.memory.store({
-  actorId: "agent_1",
-  content: "The user asked about their billing history.",
-  memoryType: "interaction",
-  importance: 0.7,
-  tags: ["billing", "support"],
-});
-
-// Batch
-const mems = await ms.memory.storeBatch([
-  { actorId: "agent_1", content: "Question 1" },
-  { actorId: "agent_1", content: "Question 2" },
-]);
-```
-
-If `embedOnStore` is enabled (default), embeddings are computed automatically. Set `embedOnStore: false` in config to compute embeddings lazily.
-
-#### `retrieve(query)`
-
-```typescript
-const memories = await ms.memory.retrieve({
-  actorId: "agent_1",           // Filter by actor
-  query: "billing",             // Semantic or keyword search
-  memoryTypes: ["interaction"], // Only certain types
-  tags: ["support"],            // Only certain tags
-  limit: 10,                    // Max results (default 10)
-  strategy: "hybrid",           // "semantic" | "hybrid" | "recent" | "important"
-});
-```
-
-**Retrieval strategies:**
-| Strategy | Behavior | Requires Embeddings |
-|----------|----------|--------------------|
-| `recent` | Most recent first | No |
-| `important` | Highest importance first | No |
-| `semantic` | Cosine similarity search | Yes |
-| `hybrid` | Semantic + importance sorting | Yes |
-
-If no embedding adapter is configured, `semantic` and `hybrid` fall back to keyword search + importance sorting.
-
-#### `compileContext(options)`
-
-Assembles an LLM-ready context block from memories:
-
-```typescript
-const ctx = await ms.memory.compileContext({
-  actorId: "npc_elena",
-  targetId: "player_1",       // Enrich with relationship context
-  maxTokens: 2000,            // Soft cap (estimates tokens, doesn't truncate mid-word)
-  includeRelationships: true, // Inject relationship summaries into prompt
-  includeQuests: true,        // Inject active quests into prompt
-  memoryTypes: ["interaction", "summary"], // Only certain types
-});
-```
-
-Output `ctx.systemPrompt` is designed to be used as the system message in your LLM call.
-
-#### `summarize(options)`
-
-Compresses N old memories into one summary memory using the configured LLM:
-
-```typescript
-const { summary, deletedCount } = await ms.memory.summarize({
-  actorId: "npc_elena",         // Optional — scope to one actor
-  olderThan: new Date("2025-01-01"),  // Optional — only summarize old memories
-  skipMostRecent: 5,            // Don't touch the 5 most recent
-  targetCount: 15,              // Summarize at most 15 memories
-  memoryTypes: ["interaction"], // Only summarize interactions
-  keepOriginals: false,         // Delete originals after summary (default false)
-});
-```
-
-**Warning:** `keepOriginals: false` is data-destructive. The original memories are deleted and replaced with a summary. Set `keepOriginals: true` to preserve originals.
-
-#### `prune(strategy)` / `dryRunPrune(strategy)`
-
-Remove low-value memories:
-
-```typescript
-// Prune by age — remove memories older than 30 days
-const { pruned, count } = await ms.memory.prune({
-  type: "byAge",
-  maxAge: 30 * 24 * 60 * 60 * 1000,
-});
-
-// Prune by importance — keep only high-importance memories
-await ms.memory.prune({ type: "byImportance", minImportance: 0.5 });
-
-// Prune by count — keep at most 500 per actor
-await ms.memory.prune({ type: "byCount", maxPerActor: 500 });
-
-// Prune by type — remove all gossip
-await ms.memory.prune({ type: "byType", memoryTypes: ["gossip"] });
-
-// Custom predicate
-await ms.memory.prune({
-  type: "custom",
-  predicate: (memory) => memory.content.includes("spam"),
-});
-
-// Dry run — see what would be removed without deleting
-const { wouldPrune, count } = await ms.memory.dryRunPrune({ type: "byAge", maxAge: 86400000 });
-```
-
-#### `count(filter?)`
-
-```typescript
-const total = await ms.memory.count();
-const interactionsCount = await ms.memory.count({ actorId: "agent_1", memoryType: "interaction" });
-```
-
-#### `get(id)` / `delete(id)` / `deleteMany(ids)` / `touch(id)`
-
-```typescript
-const mem = await ms.memory.get("mem_abc123");
-await ms.memory.delete("mem_abc123");
-await ms.memory.deleteMany(["mem_abc", "mem_def"]);  // returns count deleted
-await ms.memory.touch("mem_abc");  // bumps recency without changing content
-```
-
----
-
-### Relationship Subsystem
-
-Access via `ms.relationships.*`:
-
-#### `set(actorA, actorB, data)` — upsert
-
-```typescript
-const rel = await ms.relationships.set("npc_elena", "player_1", {
-  affinity: 20,
-  trust: 15,
-  fear: 0,
-  respect: 10,
-  tags: ["rescuer"],
-});
-```
-
-This is idempotent — calling `set()` again overwrites values. The `interactionCount` increments automatically.
-
-#### `updateDeltas(actorA, actorB, deltas)` — increment/decrement
-
-```typescript
-const rel = await ms.relationships.updateDeltas("npc_elena", "player_1", {
-  affinity: 5,    // +5 to affinity
-  trust: -3,      // -3 to trust
-  // only specify what changed
-});
-```
-
-Throws `NOT_FOUND` if the relationship doesn't exist yet. Use `set()` for first-time creation.
-
-#### `get(actorA, actorB)` / `getAll(actorId)`
-
-```typescript
-const rel = await ms.relationships.get("npc_elena", "player_1");
-const allElenasRels = await ms.relationships.getAll("npc_elena");
-```
-
-#### `find(filter)`
-
-```typescript
-const friends = await ms.relationships.find({ minAffinity: 30 });
-const enemies = await ms.relationships.find({ maxAffinity: -30 });
-const tagged = await ms.relationships.find({ tag: "mentor" });
-const byStage = await ms.relationships.find({ stage: "close_friend" });
-```
-
-#### `delete(actorA, actorB)`
-
-```typescript
-await ms.relationships.delete("npc_elena", "player_1");
-```
-
----
-
-### Quest Subsystem
-
-Access via `ms.quests.*`:
-
-#### `create(def)`
-
-```typescript
-const quest = await ms.quests.create({
-  title: "Save the Village",
-  description: "Defeat the goblin raiders threatening the village.",
-  giverId: "npc_elder",
-  objectives: [
-    { index: 0, description: "Kill 5 goblins", isOptional: false, targetCount: 5 },
-    { index: 1, description: "Rescue the captured villagers", isOptional: false },
-    { index: 2, description: "Find the goblin leader's treasure", isOptional: true },
-  ],
-  rewards: {
-    gold: 500,
-    items: ["Village Hero Sword"],
-    relationshipBonus: { "npc_elder": 30 },
-  },
-  timeLimit: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),  // 7 days
-  prerequisites: ["quest_village_intro"],  // Must complete intro first
-});
-```
-
-#### `accept(id, playerId)`
-
-```typescript
-const quest = await ms.quests.accept("quest_abc", "player_1");
-// Throws if quest is not "offered" or prerequisites aren't met
-```
-
-#### `updateObjective(questId, objIndex, complete)`
-
-```typescript
-const quest = await ms.quests.updateObjective("quest_abc", 0, true);
-// Status changes to "in_progress" on first objective update
-// Auto-completes quest when all non-optional objectives are done
-```
-
-#### `complete(id)` / `fail(id)`
-
-```typescript
-await ms.quests.complete("quest_abc");
-await ms.quests.fail("quest_xyz");
-```
-
-#### `list(options?)`
-
-```typescript
-const active = await ms.quests.list({ playerId: "player_1", status: ["accepted", "in_progress"] });
-const allFromNpc = await ms.quests.list({ giverId: "npc_elder" });
-```
-
-#### `get(id)`
-
-```typescript
-const quest = await ms.quests.get("quest_abc");
-```
-
----
-
-### Export / Import
-
-Snapshot the full state — all memories, relationships, and quests:
-
-```typescript
-const snapshot = await ms.export();
-// {
-//   version: 1,
-//   memories: [...],
-//   relationships: [...],
-//   quests: [...],
-//   exportedAt: "2025-06-06T12:00:00.000Z"
-// }
-
-// Save to disk
-fs.writeFileSync("state.json", JSON.stringify(snapshot, null, 2));
-
-// Restore later
-const data = JSON.parse(fs.readFileSync("state.json", "utf-8"));
-const ms2 = new MemStack({ ... });
-await ms2.import(data);
-```
-
-Use this for:
-- Persisting state across server restarts
-- Backups before pruning or summarization
-- Migrating between storage backends
-
-### Health Checks
-
-```typescript
-const status = await ms.health();
-if (!status.storage) console.error("Storage is down!");
-if (!status.llm) console.error("LLM is unreachable!");
-if (!status.embedding) console.error("Embedding service is down!");
+await ms.close(); // graceful shutdown
 ```
 
 ---
 
 ## Configuration
 
-Full `MemStackConfig`:
-
 ```typescript
 const ms = new MemStack({
-  // REQUIRED
-  llm: LLMProvider;              // Any LLM adapter — used for summarization
+  llm: new OpenAILLMAdapter({ apiKey: "..." }),
 
-  // OPTIONAL
-  embedding?: EmbeddingProvider; // If omitted, semantic search falls back to keyword
-  storage?: StorageProvider;     // Default: InMemoryStorage
+  // Defaults control auto-behavior
+  defaults: {
+    summarizationThreshold: 50,      // Summarize every 50 interactions (default: 100)
+    embedOnStore: false,             // Don't auto-embed — saves API costs
+    pruneStrategy: {                 // Auto-clean on every store()
+      type: "byAge",
+      maxAge: 90 * 86400000,         // 90 days
+    },
+  },
 
-  defaults?: {
-    maxMemoriesPerActor?: number;       // Hard cap, default: no limit
-    summarizationThreshold?: number;    // Auto-summarize when interaction count % threshold === 0. Default: 100
-    importanceDecayRate?: number;       // How fast importance fades per day. Default: 0.01
-    embedOnStore?: boolean;             // Auto-embed memories on store(). Default: true
-    pruneStrategy?: PruneStrategy;      // Auto-prune on every process() call. Default: undefined (disabled)
-  };
-
-  hooks?: {
-    onMemoryStored?: (memory: Memory) => void;
-    onMemoryPruned?: (ids: string[]) => void;
-    onSummaryCreated?: (summary: Memory, deletedCount: number) => void;
-    onRelationshipChanged?: (rel: Relationship) => void;
-    onQuestUpdated?: (quest: Quest) => void;
-  };
+  // Hooks for observability
+  hooks: {
+    onMemoryStored: (m) => logger.debug("memory:stored", { id: m.id, actor: m.actorId }),
+    onMemoryPruned: (ids) => logger.info("memory:pruned", { count: ids.length }),
+    onSummaryCreated: (summary, n) => logger.info("memory:summarized", { count: n }),
+  },
 });
 ```
 
@@ -718,268 +648,120 @@ const ms = new MemStack({
 
 ### Custom Storage
 
-Implement the `StorageProvider` interface to use any database:
+Implement `StorageProvider` for any database. The interface is 9 methods. See the reference section above for the full contract.
 
-```typescript
-import type { StorageProvider, MemoryStoreInput } from "@memstack/core";
-import type { Memory } from "@memstack/core";
-import { createClient } from "redis";
+### Custom LLM / Embedding
 
-class RedisStorage implements StorageProvider {
-  private client: ReturnType<typeof createClient>;
-
-  async initialize() {
-    this.client = createClient();
-    await this.client.connect();
-  }
-
-  async store(input: MemoryStoreInput): Promise<Memory> {
-    const id = `mem_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const memory: Memory = {
-      id, actorId: input.actorId, memoryType: input.memoryType ?? "interaction",
-      content: input.content, importance: input.importance ?? 0.5,
-      emotionalValence: input.emotionalValence ?? 0, tags: input.tags ?? [],
-      embedding: input.embedding, sourceId: input.sourceId,
-      metadata: input.metadata ?? {}, expiresAt: input.expiresAt,
-      createdAt: new Date(),
-    };
-    await this.client.set(`mem:${id}`, JSON.stringify(memory));
-    return memory;
-  }
-
-  // ... implement remaining methods
-}
-```
-
-### Custom LLM Provider
+Implement `LLMProvider` or `EmbeddingProvider` for any service:
 
 ```typescript
 import type { LLMProvider } from "@memstack/core";
 
 class TogetherAIAdapter implements LLMProvider {
-  constructor(private apiKey: string) {}
-
-  async complete(request: { system: string; user: string; model?: string }) {
-    const response = await fetch("https://api.together.xyz/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: request.model ?? "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        messages: [
-          { role: "system", content: request.system },
-          { role: "user", content: request.user },
-        ],
-      }),
+  async complete(req: { system: string; user: string; model?: string }) {
+    const res = await fetch("https://api.together.xyz/v1/chat/completions", {
+      headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: req.model, messages: [{ role: "system", content: req.system }, { role: "user", content: req.user }] }),
     });
-    const data = await response.json() as any;
-    return {
-      text: data.choices[0].message.content,
-      tokens: {
-        prompt: data.usage?.prompt_tokens ?? 0,
-        completion: data.usage?.completion_tokens ?? 0,
-        total: data.usage?.total_tokens ?? 0,
-      },
-    };
-  }
-}
-```
-
-### Custom Embedding Provider
-
-```typescript
-import type { EmbeddingProvider } from "@memstack/core";
-
-class LocalEmbeddingProvider implements EmbeddingProvider {
-  dimensions = 384; // mini model
-
-  async embed(texts: string[]): Promise<number[][]> {
-    // Use @xenova/transformers or any local embedding library
-    const response = await fetch("http://localhost:8080/embed", {
-      method: "POST",
-      body: JSON.stringify({ texts }),
-    });
-    return (await response.json()).embeddings;
+    const data = await res.json() as any;
+    return { text: data.choices[0].message.content, tokens: { prompt: data.usage.prompt_tokens, completion: data.usage.completion_tokens, total: data.usage.total_tokens } };
   }
 }
 ```
 
 ### Event Hooks
 
-React to memory lifecycle events:
+Monitor memory operations without modifying code:
 
 ```typescript
 const ms = new MemStack({
-  llm: new OpenAILLMAdapter({ apiKey }),
+  llm,
   hooks: {
-    onMemoryStored: (memory) => {
-      console.log(`New memory: ${memory.id} by ${memory.actorId}`);
-    },
-    onMemoryPruned: (ids) => {
-      console.log(`Pruned ${ids.length} memories: ${ids.join(", ")}`);
-    },
-    onSummaryCreated: (summary, deletedCount) => {
-      console.log(`Summary created (${deletedCount} memories compressed)`);
-    },
-    onRelationshipChanged: (rel) => {
-      console.log(`${rel.actorA} → ${rel.actorB}: ${rel.stage} (affinity: ${rel.affinity})`);
-    },
-    onQuestUpdated: (quest) => {
-      console.log(`Quest "${quest.title}" → ${quest.status}`);
-    },
+    onMemoryStored: (m) => metrics.increment("memory.stored"),
+    onSummaryCreated: (_, n) => metrics.gauge("memory.summarized_count", n),
+    onMemoryPruned: (ids) => metrics.increment("memory.pruned", ids.length),
   },
 });
 ```
 
 ---
 
-## Memory Lifecycle
+## Optional: Relationships & Quests
 
-### Summarization
-
-Summarization is the process of compressing many old interaction memories into a single summary memory. It uses the configured LLM.
-
-**Auto-summarization** triggers when an actor's interaction count hits a threshold (default: every 100 interactions). Set `summarizationThreshold` in config to customize.
-
-**Manual summarization:**
+MemStack also ships with entity relationship tracking and quest/goal management. These are **optional subsystems** — you don't pay for them if you don't use them. They're primarily useful for game NPCs, multi-agent simulations, and narrative applications.
 
 ```typescript
-const { summary, deletedCount } = await ms.memory.summarize({
-  actorId: "npc_elena",
-  olderThan: new Date(Date.now() - 30 * 86400000), // older than 30 days
-  skipMostRecent: 10,   // preserve the 10 most recent
-  keepOriginals: false, // delete originals after summary
+// Relationships — track how entities feel about each other
+await ms.relationships.set("agent-a", "agent-b", { affinity: 30, trust: 25 });
+const rel = await ms.relationships.get("agent-a", "agent-b");
+const allRels = await ms.relationships.getAll("agent-a");
+
+// Quests — track objectives with full lifecycle
+const quest = await ms.quests.create({
+  title: "Resolve Issue #4521",
+  description: "Fix the login 503 error",
+  giverId: "customer-42",
+  objectives: [{ index: 0, description: "Reproduce the bug", isOptional: false }],
 });
+await ms.quests.accept(quest.id, "engineer-7");
+await ms.quests.updateObjective(quest.id, 0, true); // auto-completes quest
 ```
 
-The default summarization prompt is: *"You are a memory summarizer. Condense the following list of memories into a single, concise summary paragraph..."* You can override this by passing a custom prompt to the `Summarizer` class directly.
-
-### Pruning
-
-Pruning removes low-value memories to keep storage manageable. Run it manually or configure `pruneStrategy` in defaults for auto-pruning on every `process()` call.
-
-```typescript
-// Auto-prune: remove memories below 0.1 importance on every process()
-const ms = new MemStack({
-  llm,
-  defaults: {
-    pruneStrategy: { type: "byImportance", minImportance: 0.1 },
-  },
-});
-```
-
-### Embeddings
-
-Embeddings enable semantic search — finding memories by meaning, not just keywords.
-
-**With embeddings enabled** (default when embedding adapter is configured): each `store()` call computes an embedding vector. `retrieve()` with `strategy: "semantic"` or `"hybrid"` uses cosine similarity for ranking.
-
-**Without embeddings**: retrieval falls back to keyword matching + importance/recency sorting. This is fine for many use cases and avoids embedding API costs.
-
-**Disable auto-embedding:**
-
-```typescript
-const ms = new MemStack({
-  llm,
-  embedding: new OpenAIEmbeddingAdapter({ apiKey }),
-  defaults: { embedOnStore: false },
-});
-```
-
-Then embed on demand:
-```typescript
-// Manually embed a batch of memories (for migration or bulk processing)
-```
+These subsystems don't affect memory pipeline performance or cost. Use them if your use case needs entity tracking; ignore them otherwise.
 
 ---
 
 ## Development
 
-### Setup
+### Setup & Tests
 
 ```bash
 git clone https://github.com/isiomaC/memstack.git
 cd memstack
 pnpm install
-```
 
-### Running Tests
-
-```bash
-pnpm test              # Run all tests once
-pnpm test:watch        # Watch mode — re-runs on file changes
-```
-
-Test files are in `test/`. Tests use the `InMemoryStorage` adapter — no external services required.
-
-**Test coverage:**
-- `test/storage.test.ts` — InMemoryStorage CRUD, retrieval strategies, counting
-- `test/relationships.test.ts` — Relationship lifecycle, stage computation, filtering
-- `test/quests.test.ts` — Quest lifecycle, objectives, prerequisites, statuses
-- `test/client.test.ts` — MemStack client, `process()`, `compileContext()`, export/import
-
-### Building
-
-```bash
-pnpm build             # tsup: CJS + ESM + DTS
-pnpm check             # TypeScript type-check only (no emit)
-```
-
-The build produces:
-```
-dist/
-├── index.js           # ESM
-├── index.cjs          # CJS
-├── index.d.ts         # TypeScript declarations
-├── index.d.cts        # CJS declarations
-├── index.js.map       # Source maps
-└── index.cjs.map
+pnpm test           # 25 tests, no external services needed
+pnpm test:watch     # Watch mode
+pnpm build          # CJS + ESM + type declarations
+pnpm check          # TypeScript type-check only
 ```
 
 ### Debugging
 
-**Increase log verbosity:**
-
-MemStack doesn't have built-in logging. Use event hooks for observability:
+Use hooks for observability — MemStack has no built-in logging:
 
 ```typescript
 const ms = new MemStack({
   llm,
   hooks: {
-    onMemoryStored: (m) => console.debug("[memstack] stored:", m.id, m.content.slice(0, 50)),
-    onMemoryPruned: (ids) => console.debug("[memstack] pruned:", ids.length, "memories"),
-    onSummaryCreated: (s, n) => console.debug("[memstack] summarized:", n, "→", s.id),
-    onRelationshipChanged: (r) => console.debug("[memstack] relationship:", r.actorA, "→", r.actorB, r.stage),
+    onMemoryStored: (m) => console.debug("[memstack] stored:", m.id, m.content.slice(0, 80)),
+    onMemoryPruned: (ids) => console.debug("[memstack] pruned:", ids.length),
   },
 });
 ```
 
 **Common issues:**
 
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| `CONFIG_ERROR: LLM provider is required` | No LLM adapter passed | Add `llm: new OpenAILLMAdapter({ apiKey })` to config |
-| `VALIDATION_ERROR: No memories to summarize` | Not enough memories met the `olderThan` / `targetCount` criteria | Adjust `summarize()` parameters or lower thresholds |
-| `NOT_FOUND: Relationship not found` | Tried `updateDeltas()` on a relationship that doesn't exist | Use `set()` for first-time creation, `updateDeltas()` for updates |
-| Semantic search returns no results | No embedding adapter configured | Add `embedding: new OpenAIEmbeddingAdapter({ apiKey })` or use `strategy: "recent"` |
-| Memory leak / high RAM usage | Using InMemoryStorage in production | Switch to a persistent storage adapter (implement `StorageProvider`) |
-| Summarization creates poor quality summaries | Default prompt not suitable for your domain | Override prompt using `Summarizer` constructor or pass custom prompt text |
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `CONFIG_ERROR: LLM provider is required` | No LLM adapter | Pass any `LLMProvider` to config |
+| Empty retrieval results | Wrong `actorId` or no memories stored | Check `await ms.memory.count({ actorId })` |
+| Semantic search not working | No embedding adapter or `embedOnStore: false` | Add embedding adapter or use `strategy: "recent"` |
+| High memory usage in production | Using InMemoryStorage | Implement `StorageProvider` for Postgres/Redis/etc |
+| Poor summarization quality | Default prompt doesn't match your domain | Pass custom prompt to `Summarizer` constructor |
 
-**Inspecting state:**
+**Inspecting state at runtime:**
 
 ```typescript
-// Dump all memories to console (dev only — potentially large)
-const snapshot = await ms.export();
-console.log(`Memories: ${snapshot.memories.length}`);
-console.log(`Relationships: ${snapshot.relationships.length}`);
-console.log(`Quests: ${snapshot.quests.length}`);
+// How much data do we have?
+const total = await ms.memory.count();
+const perActor = await ms.memory.count({ actorId: "user-42" });
 
-// Inspect one actor's state
-const memories = await ms.memory.retrieve({ actorId: "npc_1", limit: 100 });
-const rels = await ms.relationships.getAll("npc_1");
-console.log(JSON.stringify({ memories, rels }, null, 2));
+// What does one actor's memory look like?
+const snapshot = await ms.export();
+const actorMemories = snapshot.memories.filter(m => m.actorId === "user-42");
+console.log(`User-42: ${actorMemories.length} memories`);
+actorMemories.forEach(m => console.log(`  [${m.memoryType}] ${m.content.slice(0, 60)} (imp: ${m.importance})`));
 ```
 
 ---
@@ -987,30 +769,25 @@ console.log(JSON.stringify({ memories, rels }, null, 2));
 ## Publishing to npm
 
 ```bash
-# 1. Bump version in package.json
-# 2. Build and verify
+# Bump version, then:
 pnpm build && pnpm check && pnpm test
-
-# 3. Login to npm (first time only)
 npm login
-
-# 4. Publish
 npm publish --access public
 ```
 
-The `@memstack` scope requires `--access public` for the initial publish. Subsequent publishes inherit the access level.
+The `@memstack` scope requires `--access public` on first publish.
 
 ---
 
 ## Contributing
 
-Contributions are welcome. Areas that need work:
+Most needed contributions:
 
-- **Storage adapters**: Postgres, Redis, SQLite, filesystem (disk)
+- **Storage adapters**: Postgres, Redis, SQLite, filesystem
 - **LLM adapters**: Ollama, Groq, Together AI, Gemini
 - **Embedding adapters**: Cohere, Voyage AI, local transformers.js
-- **More tests**: Edge cases, concurrent access, large-scale performance
-- **Docs**: Architecture diagrams, tutorial video, API playground
+- **Tests**: Edge cases, concurrent access, large-scale benchmarks
+- **Docs**: Architecture diagrams, tutorials
 
 Open an issue or PR at [github.com/isiomaC/memstack](https://github.com/isiomaC/memstack).
 
