@@ -83,7 +83,7 @@ export class InMemoryStorage implements StorageProvider {
       results = results.filter((m) => query.memoryTypes!.includes(m.memoryType));
     }
     if (query.tags && query.tags.length > 0) {
-      results = results.filter((m) => query.tags?.some((t) => query.tags!.includes(t)));
+      results = results.filter((m) => m.tags?.some((t) => query.tags!.includes(t)));
     }
     if (query.query) {
       const q = query.query.toLowerCase();

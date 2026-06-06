@@ -1,4 +1,4 @@
-import type { Memory, Relationship, Quest, ProcessResult } from "./types.js";
+import type { Memory, ProcessResult } from "./types.js";
 
 // ── Memory ──
 
@@ -47,10 +47,7 @@ export interface MemoryRetrieveQuery {
 
 export interface ContextOptions {
   actorId: string;
-  targetId?: string;
   maxTokens?: number;
-  includeRelationships?: boolean;
-  includeQuests?: boolean;
   memoryTypes?: string[];
 }
 
@@ -65,81 +62,11 @@ export interface SummarizeOptions {
 
 export interface PruneStrategy {
   type: "byAge" | "byImportance" | "byCount" | "byType" | "custom";
-  /** Prune memories older than this */
-  maxAge?: number; // ms
-  /** Prune memories below this importance */
+  maxAge?: number;
   minImportance?: number;
-  /** Keep at most this many per actor */
   maxPerActor?: number;
-  /** Prune only these memory types */
   memoryTypes?: string[];
-  /** Custom predicate */
   predicate?: (memory: Memory) => boolean;
-}
-
-// ── Relationships ──
-
-export interface RelationshipSetInput {
-  affinity?: number;
-  trust?: number;
-  fear?: number;
-  respect?: number;
-  stage?: import("./types.js").RelationshipStage;
-  tags?: string[];
-  metadata?: Record<string, unknown>;
-}
-
-export interface RelationshipDeltaInput {
-  affinity?: number;
-  trust?: number;
-  fear?: number;
-  respect?: number;
-}
-
-export interface RelationshipFindFilter {
-  actorId?: string;
-  minAffinity?: number;
-  maxAffinity?: number;
-  stage?: import("./types.js").RelationshipStage;
-  tag?: string;
-}
-
-export interface RelationshipStore {
-  set(actorA: string, actorB: string, data: RelationshipSetInput): Promise<Relationship>;
-  updateDeltas(actorA: string, actorB: string, deltas: RelationshipDeltaInput): Promise<Relationship>;
-  get(actorA: string, actorB: string): Promise<Relationship | null>;
-  getAll(actorId: string): Promise<Relationship[]>;
-  find(filter: RelationshipFindFilter): Promise<Relationship[]>;
-  delete(actorA: string, actorB: string): Promise<void>;
-}
-
-// ── Quests ──
-
-export interface QuestCreateInput {
-  title: string;
-  description: string;
-  giverId: string;
-  objectives: Omit<import("./types.js").QuestObjective, "isComplete" | "currentCount">[];
-  rewards?: import("./types.js").QuestReward;
-  timeLimit?: Date;
-  prerequisites?: string[];
-  metadata?: Record<string, unknown>;
-}
-
-export interface QuestListOptions {
-  playerId?: string;
-  giverId?: string;
-  status?: import("./types.js").QuestStatus | import("./types.js").QuestStatus[];
-}
-
-export interface QuestStore {
-  create(input: QuestCreateInput): Promise<import("./types.js").Quest>;
-  get(id: string): Promise<import("./types.js").Quest | null>;
-  list(options?: QuestListOptions): Promise<import("./types.js").Quest[]>;
-  accept(id: string, playerId: string): Promise<import("./types.js").Quest>;
-  updateObjective(questId: string, objIndex: number, complete: boolean): Promise<import("./types.js").Quest>;
-  complete(id: string): Promise<import("./types.js").Quest>;
-  fail(id: string): Promise<import("./types.js").Quest>;
 }
 
 // ── Adapters ──
@@ -189,8 +116,6 @@ export interface MemStackConfig {
     onMemoryStored?: (memory: Memory) => void;
     onMemoryPruned?: (ids: string[]) => void;
     onSummaryCreated?: (summary: Memory, deletedCount: number) => void;
-    onRelationshipChanged?: (rel: Relationship) => void;
-    onQuestUpdated?: (quest: Quest) => void;
   };
 }
 
@@ -201,8 +126,6 @@ export interface ProcessInput {
   importance?: number;
   emotionalValence?: number;
   tags?: string[];
-  targetId?: string;
-  relationshipDelta?: RelationshipDeltaInput;
   metadata?: Record<string, unknown>;
   expiresAt?: Date;
 }

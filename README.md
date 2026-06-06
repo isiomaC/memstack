@@ -41,16 +41,15 @@ Think of it as the open-source alternative to [Mem0](https://mem0.ai/) — plugg
 - [Full API Reference](#full-api-reference)
   - [MemStack Client](#memstack-client)
   - [Memory Subsystem](#memory-subsystem)
-  - [Export / Import](#export--import)
-  - [Health & Close](#health--close)
+  - [Export / Import](#export-import)
+  - [Health & Close](#health-close)
 - [Configuration](#configuration)
 - [Advanced Usage](#advanced-usage)
   - [Custom Storage](#custom-storage)
-  - [Custom LLM / Embedding](#custom-llm--embedding)
+  - [Custom LLM / Embedding](#custom-llm-embedding)
   - [Event Hooks](#event-hooks)
-- [Optional: Relationships & Quests](#optional-relationships--quests)
 - [Development](#development)
-  - [Setup & Tests](#setup--tests)
+  - [Setup & Tests](#setup-tests)
   - [Debugging](#debugging)
 - [Publishing to npm](#publishing-to-npm)
 - [Contributing](#contributing)
@@ -686,29 +685,6 @@ const ms = new MemStack({
 
 ---
 
-## Optional: Relationships & Quests
-
-MemStack also ships with entity relationship tracking and quest/goal management. These are **optional subsystems** — you don't pay for them if you don't use them. They're primarily useful for game NPCs, multi-agent simulations, and narrative applications.
-
-```typescript
-// Relationships — track how entities feel about each other
-await ms.relationships.set("agent-a", "agent-b", { affinity: 30, trust: 25 });
-const rel = await ms.relationships.get("agent-a", "agent-b");
-const allRels = await ms.relationships.getAll("agent-a");
-
-// Quests — track objectives with full lifecycle
-const quest = await ms.quests.create({
-  title: "Resolve Issue #4521",
-  description: "Fix the login 503 error",
-  giverId: "customer-42",
-  objectives: [{ index: 0, description: "Reproduce the bug", isOptional: false }],
-});
-await ms.quests.accept(quest.id, "engineer-7");
-await ms.quests.updateObjective(quest.id, 0, true); // auto-completes quest
-```
-
-These subsystems don't affect memory pipeline performance or cost. Use them if your use case needs entity tracking; ignore them otherwise.
-
 ---
 
 ## Development
@@ -720,7 +696,7 @@ git clone https://github.com/isiomaC/memstack.git
 cd memstack
 pnpm install
 
-pnpm test           # 25 tests, no external services needed
+pnpm test           # 14 tests, no external services needed
 pnpm test:watch     # Watch mode
 pnpm build          # CJS + ESM + type declarations
 pnpm check          # TypeScript type-check only

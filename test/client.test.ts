@@ -15,8 +15,6 @@ describe("MemStack", () => {
     const ms = new MemStack({ llm: mockLLM });
     expect(ms).toBeDefined();
     expect(ms.memory).toBeDefined();
-    expect(ms.relationships).toBeDefined();
-    expect(ms.quests).toBeDefined();
   });
 
   it("throws without LLM", () => {
@@ -26,46 +24,32 @@ describe("MemStack", () => {
   it("process() stores memory and returns result", async () => {
     const ms = new MemStack({ llm: mockLLM });
     const result = await ms.process({
-      actorId: "npc_elena",
-      content: "The player greeted me warmly.",
+      actorId: "agent-7",
+      content: "User reported login failure.",
       importance: 0.8,
-      emotionalValence: 0.6,
+      emotionalValence: -0.3,
+      tags: ["bug", "login"],
     });
 
     expect(result.memory.id).toMatch(/^mem_/);
-    expect(result.memory.actorId).toBe("npc_elena");
-    expect(result.memory.content).toBe("The player greeted me warmly.");
+    expect(result.memory.actorId).toBe("agent-7");
+    expect(result.memory.content).toBe("User reported login failure.");
     expect(result.memory.importance).toBe(0.8);
-    expect(result.memory.emotionalValence).toBe(0.6);
-  });
-
-  it("process() updates relationship when targetId provided", async () => {
-    const ms = new MemStack({ llm: mockLLM });
-    const result = await ms.process({
-      actorId: "npc_elena",
-      content: "Saved from danger",
-      targetId: "player_1",
-      relationshipDelta: { affinity: 10, trust: 5 },
-    });
-
-    expect(result.relationshipUpdate).toBeDefined();
-    expect(result.relationshipUpdate!.current.affinity).toBe(10);
-    expect(result.relationshipUpdate!.current.trust).toBe(5);
+    expect(result.memory.emotionalValence).toBe(-0.3);
+    expect(result.memory.tags).toEqual(["bug", "login"]);
   });
 
   it("compileContext assembles prompt from memories", async () => {
     const ms = new MemStack({ llm: mockLLM });
-    // Store 15+ memories so both Recent and Important sections have content
     for (let i = 0; i < 15; i++) {
       await ms.process({
-        actorId: "npc_1",
+        actorId: "agent-1",
         content: `Memory ${i}`,
         importance: i % 3 === 0 ? 0.9 : 0.3,
       });
     }
 
-    const ctx = await ms.memory.compileContext({ actorId: "npc_1" });
-
+    const ctx = await ms.memory.compileContext({ actorId: "agent-1" });
     expect(ctx.systemPrompt).toContain("Recent Interactions");
     expect(ctx.recentMemories.length).toBeGreaterThan(0);
     expect(ctx.importantMemories.length).toBeGreaterThan(0);
@@ -75,22 +59,19 @@ describe("MemStack", () => {
   it("export() and import() round-trips", async () => {
     const ms = new MemStack({ llm: mockLLM });
     await ms.process({ actorId: "a", content: "test memory" });
-    await ms.relationships.set("a", "b", { affinity: 50 });
+    await ms.memory.store({ actorId: "a", content: "another memory", importance: 0.9 });
 
     const snapshot = await ms.export();
     expect(snapshot.version).toBe(1);
-    expect(snapshot.memories).toHaveLength(1);
-    expect(snapshot.relationships).toHaveLength(1);
+    expect(snapshot.memories).toHaveLength(2);
 
     const ms2 = new MemStack({ llm: mockLLM });
     await ms2.import(snapshot);
 
     const restored = await ms2.memory.retrieve({ actorId: "a" });
-    expect(restored).toHaveLength(1);
-    expect(restored[0].content).toBe("test memory");
-
-    const restoredRel = await ms2.relationships.get("a", "b");
-    expect(restoredRel?.affinity).toBe(50);
+    expect(restored).toHaveLength(2);
+    expect(restored.map((m) => m.content)).toContain("test memory");
+    expect(restored.map((m) => m.content)).toContain("another memory");
   });
 
   it("dryRunPrune shows what would be removed without deleting", async () => {
@@ -102,6 +83,16 @@ describe("MemStack", () => {
     expect(dry.count).toBe(1);
 
     const stillThere = await ms.memory.count();
-    expect(stillThere).toBe(2); // dryRun doesn't delete
+    expect(stillThere).toBe(2);
+  });
+
+  it("retrieve filters by tag and strategy", async () => {
+    const ms = new MemStack({ llm: mockLLM });
+    await ms.process({ actorId: "a", content: "bug report", tags: ["bug"] });
+    await ms.process({ actorId: "a", content: "feature request", tags: ["feature"] });
+
+    const bugResults = await ms.memory.retrieve({ actorId: "a", tags: ["bug"] });
+    expect(bugResults).toHaveLength(1);
+    expect(bugResults[0].content).toBe("bug report");
   });
 });

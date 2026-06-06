@@ -1,20 +1,11 @@
 import type { Memory, ProcessResult, MemStackSnapshot, HealthStatus } from "./types.js";
-import type {
-  MemStackConfig,
-  ProcessInput,
-  MemoryStoreInput,
-  RelationshipDeltaInput,
-} from "./interfaces.js";
+import type { MemStackConfig, ProcessInput, MemoryStoreInput } from "./interfaces.js";
 import { MemoryStore } from "./memory/MemoryStore.js";
-import { RelationshipGraph } from "./relationships/RelationshipGraph.js";
-import { QuestManager } from "./quests/QuestManager.js";
 import { InMemoryStorage } from "./adapters/storage/memory.js";
 import { configError, validationError } from "./errors.js";
 
 export class MemStack {
   readonly memory: MemoryStore;
-  readonly relationships: RelationshipGraph;
-  readonly quests: QuestManager;
 
   private config: MemStackConfig;
   private storage: InMemoryStorage;
@@ -33,13 +24,9 @@ export class MemStack {
       llm: config.llm,
       embedOnStore: config.defaults?.embedOnStore ?? true,
     });
-
-    this.relationships = new RelationshipGraph();
-    this.quests = new QuestManager();
   }
 
   async process(input: ProcessInput): Promise<ProcessResult> {
-    // 1. Store the memory
     const memoryInput: MemoryStoreInput = {
       actorId: input.actorId,
       content: input.content,
@@ -52,48 +39,9 @@ export class MemStack {
     };
 
     const memory = await this.memory.store(memoryInput);
-
-    // 2. Fire hook
     this.config.hooks?.onMemoryStored?.(memory);
 
-    // 3. Update relationship if targetId provided
-    let relationshipUpdate: ProcessResult["relationshipUpdate"];
-    if (input.targetId) {
-      let previous: import("./types.js").Relationship | null = null;
-      try {
-        previous = await this.relationships.get(input.actorId, input.targetId);
-      } catch {
-        // First interaction
-      }
-
-      const deltas: RelationshipDeltaInput = input.relationshipDelta ?? {
-        affinity: input.emotionalValence ? input.emotionalValence * 5 : 0,
-      };
-
-      let current: import("./types.js").Relationship;
-      try {
-        if (previous) {
-          current = await this.relationships.updateDeltas(input.actorId, input.targetId, deltas);
-        } else {
-          current = await this.relationships.set(input.actorId, input.targetId, {
-            affinity: deltas.affinity ?? 0,
-            trust: deltas.trust ?? 0,
-            fear: deltas.fear ?? 0,
-            respect: deltas.respect ?? 0,
-          });
-        }
-      } catch {
-        // If relationship update fails, continue without it
-        current = previous!;
-      }
-
-      if (current) {
-        relationshipUpdate = { previous: previous!, current };
-        this.config.hooks?.onRelationshipChanged?.(current);
-      }
-    }
-
-    // 4. Auto-summarize if threshold is hit
+    // Auto-summarize if threshold is hit
     let summaryCreated: Memory | undefined;
     const threshold = this.config.defaults?.summarizationThreshold ?? 100;
     if (threshold > 0) {
@@ -117,30 +65,7 @@ export class MemStack {
       }
     }
 
-    // 5. Check for quest triggers (simplified: look for objectives with matching tags)
-    let questTriggers: import("./types.js").Quest[] | undefined;
-    if (input.tags && input.tags.length > 0) {
-      const activeQuests = await this.quests.list({ status: ["accepted", "in_progress"] });
-      for (const quest of activeQuests) {
-        let updated = false;
-        for (const obj of quest.objectives) {
-          if (!obj.isComplete && input.tags.some((t) => obj.description.toLowerCase().includes(t.toLowerCase()))) {
-            await this.quests.updateObjective(quest.id, obj.index, true);
-            updated = true;
-          }
-        }
-        if (updated) {
-          const refreshed = await this.quests.get(quest.id);
-          if (refreshed) {
-            questTriggers = questTriggers ?? [];
-            questTriggers.push(refreshed);
-            this.config.hooks?.onQuestUpdated?.(refreshed);
-          }
-        }
-      }
-    }
-
-    // 6. Auto-prune if configured
+    // Auto-prune if configured
     const pruneStrategy = this.config.defaults?.pruneStrategy;
     if (pruneStrategy) {
       try {
@@ -153,12 +78,7 @@ export class MemStack {
       }
     }
 
-    return {
-      memory,
-      relationshipUpdate,
-      questTriggers,
-      summaryCreated,
-    };
+    return { memory, summaryCreated };
   }
 
   async export(): Promise<MemStackSnapshot> {
@@ -166,8 +86,6 @@ export class MemStack {
     return {
       version: 1,
       memories,
-      relationships: this.relationships.export(),
-      quests: this.quests.export(),
       exportedAt: new Date().toISOString(),
     };
   }
@@ -177,47 +95,32 @@ export class MemStack {
       throw validationError(`Unsupported snapshot version: ${snapshot.version}`);
     }
     await this.memory.storeBatch(snapshot.memories);
-    this.relationships.import(snapshot.relationships);
-    this.quests.import(snapshot.quests);
   }
 
   async health(): Promise<HealthStatus> {
-    const status: HealthStatus = {
-      storage: false,
-      llm: false,
-      embedding: false,
-    };
+    const status: HealthStatus = { storage: false, llm: false, embedding: false };
 
     try {
       await this.memory.count();
       status.storage = true;
-    } catch {
-      // Storage check failed
-    }
+    } catch { /* storage check failed */ }
 
     if (this.config.llm) {
       try {
-        await this.config.llm.complete({
-          system: "Say 'ok'",
-          user: "Health check",
-        });
+        await this.config.llm.complete({ system: "ok", user: "health" });
         status.llm = true;
-      } catch {
-        // LLM check failed
-      }
+      } catch { /* llm check failed */ }
     } else {
-      status.llm = true; // no LLM configured means "healthy" for this check
+      status.llm = true;
     }
 
     if (this.config.embedding) {
       try {
         await this.config.embedding.embed(["health check"]);
         status.embedding = true;
-      } catch {
-        // Embedding check failed
-      }
+      } catch { /* embedding check failed */ }
     } else {
-      status.embedding = true; // no embedding configured means "not applicable"
+      status.embedding = true;
     }
 
     return status;

@@ -42,8 +42,6 @@ export class ContextCompiler {
       systemPrompt,
       recentMemories,
       importantMemories,
-      relationships: [],
-      activeQuests: [],
       tokenEstimate,
     };
   }
