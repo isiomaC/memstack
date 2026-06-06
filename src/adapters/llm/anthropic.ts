@@ -5,13 +5,14 @@ export interface AnthropicLLMConfig {
   apiKey: string;
   baseURL?: string;
   defaultModel?: string;
+  defaultMaxTokens?: number;
 }
 
 export class AnthropicLLMAdapter implements LLMProvider {
   private apiKey: string;
   private baseURL: string;
   private defaultModel: string;
-
+  private defaultMaxTokens: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private sdk: any;
 
@@ -19,14 +20,18 @@ export class AnthropicLLMAdapter implements LLMProvider {
     this.apiKey = config.apiKey;
     this.baseURL = config.baseURL ?? "https://api.anthropic.com";
     this.defaultModel = config.defaultModel ?? "claude-sonnet-4-5-20250929";
+    this.defaultMaxTokens = config.defaultMaxTokens ?? 1024;
   }
 
   async complete(request: {
     system: string;
     user: string;
     model?: string;
+    temperature?: number;
+    maxTokens?: number;
   }): Promise<{ text: string; tokens: { prompt: number; completion: number; total: number } }> {
     const model = request.model ?? this.defaultModel;
+    const maxTokens = request.maxTokens ?? this.defaultMaxTokens;
 
     try {
       if (!this.sdk) {
@@ -38,10 +43,14 @@ export class AnthropicLLMAdapter implements LLMProvider {
         model,
         system: request.system,
         messages: [{ role: "user", content: request.user }],
-        max_tokens: 1024,
+        max_tokens: maxTokens,
+        ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
       });
 
-      const text = response.content[0]?.text ?? "";
+      const text = response.content.length > 0 && "text" in response.content[0]
+        ? (response.content[0] as { text: string }).text
+        : "";
+
       return {
         text,
         tokens: {

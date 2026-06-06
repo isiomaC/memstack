@@ -32,6 +32,9 @@
     "game-dev"
   ],
   "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "peerDependencies": {
     "openai": "^4.0.0",
     "@anthropic-ai/sdk": "^0.39.0",

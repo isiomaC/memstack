@@ -3,11 +3,12 @@ import type { ContextOptions } from "../interfaces.js";
 
 export class ContextCompiler {
   private estimateTokens(text: string): number {
-    // Rough estimate: ~4 chars per token
     return Math.ceil(text.length / 4);
   }
 
   compile(memories: Memory[], options: ContextOptions): CompiledContext {
+    const maxTokens = options.maxTokens ?? 2000;
+
     const relevant = memories.filter((m) => {
       if (options.memoryTypes && options.memoryTypes.length > 0) {
         return options.memoryTypes.includes(m.memoryType);
@@ -15,59 +16,78 @@ export class ContextCompiler {
       return true;
     });
 
-    // Recent: last 10, sorted by date
-    const recentMemories = [...relevant]
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .slice(0, 10);
-
-    // Important: top 10 by importance, deduplicated by content similarity
-    const importantMemories = this.deduplicate(
-      [...relevant]
-        .filter((m) => !recentMemories.find((r) => r.id === m.id))
-        .sort((a, b) => b.importance - a.importance)
-        .slice(0, 10)
+    // Recent: sorted newest-first
+    const sortedRecent = [...relevant].sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
     );
 
-    // Build system prompt
-    const systemPrompt = this.buildSystemPrompt(recentMemories, importantMemories, options);
+    // Important: only high-importance (>=0.5), deduplicated, sorted by importance
+    const sortedImportant = this.deduplicate(
+      [...relevant]
+        .filter((m) => m.importance >= 0.5)
+        .sort((a, b) => b.importance - a.importance)
+    );
 
-    // Token estimate
+    // Build token-budgeted sections
+    const { recentMemories, importantMemories, systemPrompt } =
+      this.assembleTokenBudgeted(sortedRecent, sortedImportant, maxTokens);
+
     const allContent = recentMemories
       .concat(importantMemories)
       .map((m) => m.content)
       .join("\n");
     const tokenEstimate = this.estimateTokens(systemPrompt + allContent);
 
-    return {
-      systemPrompt,
-      recentMemories,
-      importantMemories,
-      tokenEstimate,
-    };
+    return { systemPrompt, recentMemories, importantMemories, tokenEstimate };
   }
 
-  private buildSystemPrompt(
+  private assembleTokenBudgeted(
     recent: Memory[],
     important: Memory[],
-    options: ContextOptions
-  ): string {
-    const parts: string[] = [];
+    maxTokens: number
+  ): { recentMemories: Memory[]; importantMemories: Memory[]; systemPrompt: string } {
+    const includedImportant: Memory[] = [];
+    const includedRecent: Memory[] = [];
+    const seen = new Set<string>();
+    let usedTokens = 0;
 
-    if (important.length > 0) {
+    // Add important memories first (signal over recency)
+    for (const m of important) {
+      if (seen.has(m.id)) continue;
+      const line = `- ${m.content} (${m.memoryType})\n`;
+      const tokens = this.estimateTokens(line);
+      if (usedTokens + tokens > maxTokens * 0.6) break;
+      usedTokens += tokens;
+      includedImportant.push(m);
+      seen.add(m.id);
+    }
+
+    // Add recent memories until budget is full
+    for (const m of recent) {
+      if (seen.has(m.id)) continue;
+      const line = `- ${m.content}\n`;
+      const tokens = this.estimateTokens(line);
+      if (usedTokens + tokens > maxTokens) break;
+      usedTokens += tokens;
+      includedRecent.push(m);
+      seen.add(m.id);
+    }
+
+    const parts: string[] = [];
+    if (includedImportant.length > 0) {
       parts.push("## Important Memories");
-      for (const m of important) {
+      for (const m of includedImportant) {
         parts.push(`- ${m.content} (${m.memoryType}, importance: ${m.importance.toFixed(2)})`);
       }
     }
-
-    if (recent.length > 0) {
+    if (includedRecent.length > 0) {
       parts.push("\n## Recent Interactions");
-      for (const m of recent) {
+      for (const m of includedRecent) {
         parts.push(`- ${m.content}`);
       }
     }
 
-    return parts.join("\n");
+    return { recentMemories: includedRecent, importantMemories: includedImportant, systemPrompt: parts.join("\n") };
   }
 
   private deduplicate(memories: Memory[]): Memory[] {

@@ -2,18 +2,19 @@ import type { Memory } from "../types.js";
 import type { PruneStrategy } from "../interfaces.js";
 
 export class Pruner {
+  /** Returns memories to KEEP after applying the strategy. */
   execute(memories: Memory[], strategy: PruneStrategy): Memory[] {
     switch (strategy.type) {
       case "byAge":
-        return this.pruneByAge(memories, strategy);
+        return this.keepByAge(memories, strategy);
       case "byImportance":
-        return this.pruneByImportance(memories, strategy);
+        return this.keepByImportance(memories, strategy);
       case "byCount":
-        return this.pruneByCount(memories, strategy);
+        return this.keepByCount(memories, strategy);
       case "byType":
-        return this.pruneByType(memories, strategy);
+        return this.removeByType(memories, strategy);
       case "custom":
-        return this.pruneCustom(memories, strategy);
+        return this.removeCustom(memories, strategy);
       default:
         return memories;
     }
@@ -23,18 +24,18 @@ export class Pruner {
     return this.execute(memories, strategy);
   }
 
-  private pruneByAge(memories: Memory[], strategy: PruneStrategy): Memory[] {
-    if (!strategy.maxAge) return memories; // keep all
+  private keepByAge(memories: Memory[], strategy: PruneStrategy): Memory[] {
+    if (!strategy.maxAge) return memories;
     const cutoff = Date.now() - strategy.maxAge;
     return memories.filter((m) => m.createdAt.getTime() >= cutoff);
   }
 
-  private pruneByImportance(memories: Memory[], strategy: PruneStrategy): Memory[] {
+  private keepByImportance(memories: Memory[], strategy: PruneStrategy): Memory[] {
     const threshold = strategy.minImportance ?? 0.5;
     return memories.filter((m) => m.importance >= threshold);
   }
 
-  private pruneByCount(memories: Memory[], strategy: PruneStrategy): Memory[] {
+  private keepByCount(memories: Memory[], strategy: PruneStrategy): Memory[] {
     const maxPerActor = strategy.maxPerActor ?? 100;
     const grouped = new Map<string, Memory[]>();
     for (const m of memories) {
@@ -51,13 +52,15 @@ export class Pruner {
     return kept;
   }
 
-  private pruneByType(memories: Memory[], strategy: PruneStrategy): Memory[] {
+  /** Remove memories of specified types. Opposite of filtering — removes the matches. */
+  private removeByType(memories: Memory[], strategy: PruneStrategy): Memory[] {
     if (!strategy.memoryTypes || strategy.memoryTypes.length === 0) return memories;
-    return memories.filter((m) => strategy.memoryTypes!.includes(m.memoryType));
+    return memories.filter((m) => !strategy.memoryTypes!.includes(m.memoryType));
   }
 
-  private pruneCustom(memories: Memory[], strategy: PruneStrategy): Memory[] {
-    if (!strategy.predicate) return memories;
-    return memories.filter((m) => !strategy.predicate!(m));
+  /** Remove memories matching the predicate. Predicate returns true = should be removed. */
+  private removeCustom(memories: Memory[], strategy: PruneStrategy): Memory[] {
+    if (!strategy.shouldRemove) return memories;
+    return memories.filter((m) => !strategy.shouldRemove!(m));
   }
 }

@@ -22,6 +22,8 @@ export interface MemoryStoreConfig {
   embedOnStore?: boolean;
 }
 
+const EMBEDDING_BATCH_SIZE = 2048;
+
 export class MemoryStore {
   private storage: StorageProvider;
   private embedding?: EmbeddingProvider;
@@ -51,11 +53,17 @@ export class MemoryStore {
   }
 
   async storeBatch(inputs: MemoryStoreInput[]): Promise<Memory[]> {
-    if (this.embedding && this.embedOnStore) {
-      const texts = inputs.map((i) => i.content);
-      const embeddings = await this.embedding.embed(texts);
-      const enriched = inputs.map((input, i) => ({ ...input, embedding: embeddings[i] }));
-      return this.storage.storeBatch(enriched);
+    if (this.embedding && this.embedOnStore && inputs.length > 0) {
+      const results: Memory[] = [];
+      for (let i = 0; i < inputs.length; i += EMBEDDING_BATCH_SIZE) {
+        const batch = inputs.slice(i, i + EMBEDDING_BATCH_SIZE);
+        const texts = batch.map((inp) => inp.content);
+        const embeddings = await this.embedding!.embed(texts);
+        const enriched = batch.map((input, j) => ({ ...input, embedding: embeddings[j] }));
+        const stored = await this.storage.storeBatch(enriched);
+        results.push(...stored);
+      }
+      return results;
     }
     return this.storage.storeBatch(inputs);
   }
@@ -75,7 +83,7 @@ export class MemoryStore {
   async touch(id: string): Promise<void> {
     const memory = await this.storage.get(id);
     if (!memory) throw notFound("Memory", id);
-    // Touch: re-store to update timestamp
+    await this.storage.delete(id);
     await this.storage.store({
       actorId: memory.actorId,
       content: memory.content,
@@ -86,6 +94,7 @@ export class MemoryStore {
       embedding: memory.embedding,
       sourceId: memory.sourceId,
       metadata: memory.metadata,
+      expiresAt: memory.expiresAt,
     });
   }
 
@@ -103,11 +112,16 @@ export class MemoryStore {
   }
 
   async compileContext(options: ContextOptions): Promise<CompiledContext> {
+    const maxTokens = options.maxTokens ?? 2000;
+    // Fetch up to 50 memories; compiler will truncate to meet token budget
     const memories = await this.storage.retrieve({ actorId: options.actorId, limit: 50 });
-    return this.compiler.compile(memories, options);
+    return this.compiler.compile(memories, { ...options, maxTokens });
   }
 
-  async summarize(options: SummarizeOptions): Promise<{ summary: Memory; deletedCount: number }> {
+  async summarize(
+    options: SummarizeOptions,
+    onError?: (err: Error) => void
+  ): Promise<{ summary: Memory; deletedCount: number }> {
     if (!this.summarizer) {
       throw validationError("No LLM configured for summarization");
     }
@@ -124,18 +138,28 @@ export class MemoryStore {
       toSummarize = toSummarize.filter((m) => m.createdAt < options.olderThan!);
     }
     if (options.skipMostRecent) {
-      const sorted = [...toSummarize].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      toSummarize = sorted.slice(options.skipMostRecent);
+      // Sort chronological (oldest first), skip most recent N, keep the rest
+      const sorted = [...toSummarize].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      toSummarize = sorted.slice(0, Math.max(0, sorted.length - options.skipMostRecent));
     }
     if (options.targetCount && toSummarize.length > options.targetCount) {
-      toSummarize = toSummarize.slice(-options.targetCount);
+      // Keep only the oldest targetCount (most stale, best to summarize)
+      const sorted = [...toSummarize].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      toSummarize = sorted.slice(0, options.targetCount);
     }
 
     if (toSummarize.length === 0) {
       throw validationError("No memories to summarize");
     }
 
-    const { summaryContent } = await this.summarizer.summarize(toSummarize, options);
+    let summaryContent: string;
+    try {
+      const result = await this.summarizer.summarize(toSummarize, options);
+      summaryContent = result.summaryContent;
+    } catch (err) {
+      onError?.(err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    }
 
     const summary: Memory = await this.storage.store({
       actorId: options.actorId ?? toSummarize[0].actorId,
@@ -160,7 +184,8 @@ export class MemoryStore {
   async prune(strategy: PruneStrategy): Promise<{ pruned: string[]; count: number }> {
     const allMemories = await this.storage.retrieve({ limit: 10000 });
     const kept = this.pruner.execute(allMemories, strategy);
-    const prunedIds = allMemories.filter((m) => !kept.find((k) => k.id === m.id)).map((m) => m.id);
+    const keptIds = new Set(kept.map((k) => k.id));
+    const prunedIds = allMemories.filter((m) => !keptIds.has(m.id)).map((m) => m.id);
     let count = 0;
     if (prunedIds.length > 0) {
       count = await this.storage.deleteMany(prunedIds);
@@ -171,7 +196,8 @@ export class MemoryStore {
   async dryRunPrune(strategy: PruneStrategy): Promise<{ wouldPrune: string[]; count: number }> {
     const allMemories = await this.storage.retrieve({ limit: 10000 });
     const kept = this.pruner.execute(allMemories, strategy);
-    const wouldPrune = allMemories.filter((m) => !kept.find((k) => k.id === m.id)).map((m) => m.id);
+    const keptIds = new Set(kept.map((k) => k.id));
+    const wouldPrune = allMemories.filter((m) => !keptIds.has(m.id)).map((m) => m.id);
     return { wouldPrune, count: wouldPrune.length };
   }
 

@@ -36,7 +36,11 @@ export class Summarizer {
       };
     } catch (err) {
       if (err instanceof MemStackError) throw err;
-      throw new MemStackError("LLM_ERROR", "Summarization failed", { retryable: true });
+      throw new MemStackError(
+        "LLM_ERROR",
+        `Summarization failed: ${err instanceof Error ? err.message : String(err)}`,
+        { retryable: true, details: { cause: err instanceof Error ? err.message : String(err) } }
+      );
     }
   }
 }

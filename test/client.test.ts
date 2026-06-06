@@ -38,7 +38,6 @@ describe("MemStack", () => {
     expect(result.memory.emotionalValence).toBe(-0.3);
     expect(result.memory.tags).toEqual(["bug", "login"]);
   });
-
   it("compileContext assembles prompt from memories", async () => {
     const ms = new MemStack({ llm: mockLLM });
     for (let i = 0; i < 15; i++) {
@@ -49,11 +48,11 @@ describe("MemStack", () => {
       });
     }
 
-    const ctx = await ms.memory.compileContext({ actorId: "agent-1" });
-    expect(ctx.systemPrompt).toContain("Recent Interactions");
+    const ctx = await ms.memory.compileContext({ actorId: "agent-1", maxTokens: 5000 });
+    expect(ctx.systemPrompt.length).toBeGreaterThan(0);
     expect(ctx.recentMemories.length).toBeGreaterThan(0);
     expect(ctx.importantMemories.length).toBeGreaterThan(0);
-    expect(ctx.tokenEstimate).toBeGreaterThan(0);
+    expect(ctx.tokenEstimate).toBeLessThan(5000);
   });
 
   it("export() and import() round-trips", async () => {

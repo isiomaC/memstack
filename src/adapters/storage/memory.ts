@@ -12,34 +12,28 @@ export class InMemoryStorage implements StorageProvider {
   async initialize(): Promise<void> {}
 
   generateId(): string {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substring(2, 10);
-    return `mem_${timestamp}_${random}`;
+    return `mem_${Date.now().toString(36)}_${crypto.randomUUID().slice(0, 8)}`;
   }
 
   async store(input: MemoryStoreInput): Promise<Memory> {
-    try {
-      const now = new Date();
-      const memory: MemoryRecord = {
-        id: this.generateId(),
-        actorId: input.actorId,
-        memoryType: (input.memoryType ?? "interaction") as MemoryType,
-        content: input.content,
-        importance: input.importance ?? 0.5,
-        emotionalValence: input.emotionalValence ?? 0,
-        tags: input.tags ?? [],
-        embedding: input.embedding,
-        sourceId: input.sourceId,
-        metadata: input.metadata ?? {},
-        expiresAt: input.expiresAt,
-        createdAt: now,
-        _touchedAt: now,
-      };
-      this.memories.set(memory.id, memory);
-      return memory;
-    } catch (err) {
-      throw storageError("Failed to store memory", err);
-    }
+    const now = new Date();
+    const memory: MemoryRecord = {
+      id: this.generateId(),
+      actorId: input.actorId,
+      memoryType: (input.memoryType ?? "interaction") as MemoryType,
+      content: input.content,
+      importance: input.importance ?? 0.5,
+      emotionalValence: input.emotionalValence ?? 0,
+      tags: input.tags ?? [],
+      embedding: input.embedding,
+      sourceId: input.sourceId,
+      metadata: input.metadata ?? {},
+      expiresAt: input.expiresAt,
+      createdAt: now,
+      _touchedAt: now,
+    };
+    this.memories.set(memory.id, memory);
+    return memory;
   }
 
   async storeBatch(inputs: MemoryStoreInput[]): Promise<Memory[]> {
@@ -53,7 +47,10 @@ export class InMemoryStorage implements StorageProvider {
   async get(id: string): Promise<Memory | null> {
     const memory = this.memories.get(id);
     if (!memory) return null;
-    this.touchRecord(memory);
+    if (memory.expiresAt && memory.expiresAt <= new Date()) {
+      this.memories.delete(id);
+      return null;
+    }
     return memory;
   }
 
@@ -75,6 +72,10 @@ export class InMemoryStorage implements StorageProvider {
 
   async retrieve(query: MemoryRetrieveQuery, _embedding?: number[]): Promise<Memory[]> {
     let results = Array.from(this.memories.values());
+
+    // Filter out expired
+    const now = new Date();
+    results = results.filter((m) => !m.expiresAt || m.expiresAt > now);
 
     if (query.actorId) {
       results = results.filter((m) => m.actorId === query.actorId);
@@ -100,9 +101,13 @@ export class InMemoryStorage implements StorageProvider {
       case "hybrid":
       case "semantic":
       default:
-        // In-memory: sort by importance then recency
         results.sort((a, b) => b.importance - a.importance || b._touchedAt.getTime() - a._touchedAt.getTime());
         break;
+    }
+
+    // Touch records on retrieval (for recency tracking in context assembly)
+    for (const r of results.slice(0, query.limit ?? 10)) {
+      r._touchedAt = new Date();
     }
 
     const limit = query.limit ?? 10;
@@ -110,7 +115,10 @@ export class InMemoryStorage implements StorageProvider {
   }
 
   async count(filter?: MemoryCountFilter): Promise<number> {
-    let results = Array.from(this.memories.values());
+    const now = new Date();
+    let results = Array.from(this.memories.values())
+      .filter((m) => !m.expiresAt || m.expiresAt > now);
+
     if (filter?.actorId) {
       results = results.filter((m) => m.actorId === filter.actorId);
     }
@@ -129,9 +137,5 @@ export class InMemoryStorage implements StorageProvider {
 
   getAllMemories(): Memory[] {
     return Array.from(this.memories.values());
-  }
-
-  private touchRecord(memory: MemoryRecord): void {
-    memory._touchedAt = new Date();
   }
 }

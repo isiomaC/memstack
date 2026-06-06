@@ -9,6 +9,7 @@ export class MemStack {
 
   private config: MemStackConfig;
   private storage: InMemoryStorage;
+  private processCount = 0;
 
   constructor(config: MemStackConfig) {
     if (!config.llm) {
@@ -16,7 +17,9 @@ export class MemStack {
     }
 
     this.config = config;
-    this.storage = (config.storage as InMemoryStorage) ?? new InMemoryStorage();
+    this.storage = config.storage instanceof InMemoryStorage
+      ? config.storage
+      : (config.storage ?? new InMemoryStorage()) as InMemoryStorage;
 
     this.memory = new MemoryStore({
       storage: this.storage,
@@ -40,41 +43,51 @@ export class MemStack {
 
     const memory = await this.memory.store(memoryInput);
     this.config.hooks?.onMemoryStored?.(memory);
+    this.processCount++;
 
     // Auto-summarize if threshold is hit
     let summaryCreated: Memory | undefined;
     const threshold = this.config.defaults?.summarizationThreshold ?? 100;
     if (threshold > 0) {
-      const count = await this.memory.count({
-        actorId: input.actorId,
-        memoryType: "interaction",
-      });
+      const count = await this.memory.count({ actorId: input.actorId });
       if (count % threshold === 0 && count > 0) {
         try {
-          const result = await this.memory.summarize({
-            actorId: input.actorId,
-            memoryTypes: ["interaction"],
-            skipMostRecent: 5,
-            targetCount: Math.min(15, count),
-          });
+          const result = await this.memory.summarize(
+            {
+              actorId: input.actorId,
+              memoryTypes: ["interaction"],
+              skipMostRecent: 5,
+              targetCount: Math.min(15, count),
+            },
+            this.config.hooks?.onError
+              ? (err) => this.config.hooks!.onError!(err, "summarize")
+              : undefined
+          );
           summaryCreated = result.summary;
           this.config.hooks?.onSummaryCreated?.(result.summary, result.deletedCount);
-        } catch {
-          // Summarization is best-effort
+        } catch (err) {
+          this.config.hooks?.onError?.(
+            err instanceof Error ? err : new Error(String(err)),
+            "summarize"
+          );
         }
       }
     }
 
-    // Auto-prune if configured
+    // Auto-prune if configured (throttled)
     const pruneStrategy = this.config.defaults?.pruneStrategy;
-    if (pruneStrategy) {
+    const pruneInterval = this.config.defaults?.pruneInterval ?? 100;
+    if (pruneStrategy && this.processCount % pruneInterval === 0) {
       try {
         const pruneResult = await this.memory.prune(pruneStrategy);
         if (pruneResult.count > 0) {
           this.config.hooks?.onMemoryPruned?.(pruneResult.pruned);
         }
-      } catch {
-        // Pruning is best-effort
+      } catch (err) {
+        this.config.hooks?.onError?.(
+          err instanceof Error ? err : new Error(String(err)),
+          "prune"
+        );
       }
     }
 
@@ -105,22 +118,16 @@ export class MemStack {
       status.storage = true;
     } catch { /* storage check failed */ }
 
-    if (this.config.llm) {
-      try {
-        await this.config.llm.complete({ system: "ok", user: "health" });
-        status.llm = true;
-      } catch { /* llm check failed */ }
-    } else {
+    try {
+      await this.config.llm.complete({ system: "ok", user: "health", maxTokens: 1 });
       status.llm = true;
-    }
+    } catch { /* llm check failed */ }
 
     if (this.config.embedding) {
       try {
         await this.config.embedding.embed(["health check"]);
         status.embedding = true;
       } catch { /* embedding check failed */ }
-    } else {
-      status.embedding = true;
     }
 
     return status;
