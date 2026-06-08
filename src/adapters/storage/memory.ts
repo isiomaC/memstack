@@ -18,7 +18,7 @@ export class InMemoryStorage implements StorageProvider {
   async store(input: MemoryStoreInput): Promise<Memory> {
     const now = new Date();
     const memory: MemoryRecord = {
-      id: this.generateId(),
+      id: input.id ?? this.generateId(),
       actorId: input.actorId,
       memoryType: (input.memoryType ?? "interaction") as MemoryType,
       content: input.content,
@@ -129,6 +129,12 @@ export class InMemoryStorage implements StorageProvider {
       results = results.filter((m) => m.importance >= filter.minImportance!);
     }
     return results.length;
+  }
+
+  async touch(id: string): Promise<void> {
+    const memory = this.memories.get(id);
+    if (!memory) throw notFound("Memory", id);
+    memory._touchedAt = new Date();
   }
 
   async close(): Promise<void> {

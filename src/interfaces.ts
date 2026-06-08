@@ -13,6 +13,9 @@ export interface MemoryStoreInput {
   sourceId?: string;
   metadata?: Record<string, unknown>;
   expiresAt?: Date;
+  onConflict?: "append";
+  /** Pre-assigned ID. When set, the storage adapter uses it instead of generating one. */
+  id?: string;
 }
 
 export interface MemoryStore {
@@ -84,6 +87,14 @@ export interface LLMProvider {
     text: string;
     tokens: { prompt: number; completion: number; total: number };
   }>;
+  /** Optional streaming variant. Returns an async iterable of text chunks. */
+  completeStream?(request: {
+    system: string;
+    user: string;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+  }): AsyncIterable<{ text: string; tokens: { prompt: number; completion: number; total: number } }>;
 }
 
 export interface EmbeddingProvider {
@@ -98,6 +109,8 @@ export interface StorageProvider {
   get(id: string): Promise<Memory | null>;
   delete(id: string): Promise<void>;
   deleteMany(ids: string[]): Promise<number>;
+  /** Update the last-accessed timestamp for a memory without changing its content, id, or createdAt. */
+  touch?(id: string): Promise<void>;
   retrieve(query: MemoryRetrieveQuery, embedding?: number[]): Promise<Memory[]>;
   count(filter?: MemoryCountFilter): Promise<number>;
   close(): Promise<void>;
@@ -114,6 +127,9 @@ export interface MemStackConfig {
     embedOnStore?: boolean;
     pruneStrategy?: PruneStrategy;
     pruneInterval?: number;   // Prune every N process() calls. Default: 100.
+    autoImportance?: boolean; // LLM-based importance scoring when importance not provided
+    autoTags?: boolean;       // LLM-based tag extraction when tags not provided
+    summarizationPrompt?: string; // Custom prompt for the summarizer
   };
   hooks?: {
     onMemoryStored?: (memory: Memory) => void;
@@ -132,6 +148,7 @@ export interface ProcessInput {
   tags?: string[];
   metadata?: Record<string, unknown>;
   expiresAt?: Date;
+  onConflict?: "append";
 }
 
 export type { ProcessResult };

@@ -1,25 +1,30 @@
 import type { LLMProvider } from "../../interfaces.js";
 import { MemStackError } from "../../errors.js";
 
-export interface OpenAILLMConfig {
+export interface GroqLLMConfig {
+  /** Groq API key */
   apiKey: string;
+  /** Base URL. Default: "https://api.groq.com/openai/v1" */
   baseURL?: string;
+  /** Default model. Default: "llama-3.3-70b-versatile" */
   defaultModel?: string;
+  /** Default temperature. Default: 0.7 */
   defaultTemperature?: number;
+  /** Default max tokens. Default: 1024 */
   defaultMaxTokens?: number;
 }
 
-export class OpenAILLMAdapter implements LLMProvider {
+export class GroqLLMAdapter implements LLMProvider {
   private apiKey: string;
   private baseURL: string;
   private defaultModel: string;
   private defaultTemperature: number;
   private defaultMaxTokens: number;
 
-  constructor(config: OpenAILLMConfig) {
+  constructor(config: GroqLLMConfig) {
     this.apiKey = config.apiKey;
-    this.baseURL = config.baseURL ?? "https://api.openai.com/v1";
-    this.defaultModel = config.defaultModel ?? "gpt-4o-mini";
+    this.baseURL = config.baseURL ?? "https://api.groq.com/openai/v1";
+    this.defaultModel = config.defaultModel ?? "llama-3.3-70b-versatile";
     this.defaultTemperature = config.defaultTemperature ?? 0.7;
     this.defaultMaxTokens = config.defaultMaxTokens ?? 1024;
   }
@@ -55,7 +60,7 @@ export class OpenAILLMAdapter implements LLMProvider {
 
       if (!response.ok) {
         const err = await response.text();
-        throw new MemStackError("LLM_ERROR", `OpenAI API error: ${response.status} ${err}`, {
+        throw new MemStackError("LLM_ERROR", `Groq API error: ${response.status} ${err}`, {
           retryable: response.status >= 500,
         });
       }
@@ -75,7 +80,7 @@ export class OpenAILLMAdapter implements LLMProvider {
       };
     } catch (err) {
       if (err instanceof MemStackError) throw err;
-      throw new MemStackError("LLM_ERROR", `LLM request failed: ${err instanceof Error ? err.message : String(err)}`, {
+      throw new MemStackError("LLM_ERROR", `Groq request failed: ${err instanceof Error ? err.message : String(err)}`, {
         retryable: true,
       });
     }
@@ -113,14 +118,14 @@ export class OpenAILLMAdapter implements LLMProvider {
         }),
       });
     } catch (err) {
-      throw new MemStackError("LLM_ERROR", `OpenAI streaming request failed: ${err instanceof Error ? err.message : String(err)}`, {
+      throw new MemStackError("LLM_ERROR", `Groq streaming request failed: ${err instanceof Error ? err.message : String(err)}`, {
         retryable: true,
       });
     }
 
     if (!response.ok) {
       const err = await response.text();
-      throw new MemStackError("LLM_ERROR", `OpenAI streaming error: ${response.status} ${err}`, {
+      throw new MemStackError("LLM_ERROR", `Groq streaming error: ${response.status} ${err}`, {
         retryable: response.status >= 500,
       });
     }
@@ -152,12 +157,14 @@ export class OpenAILLMAdapter implements LLMProvider {
             const parsed = JSON.parse(data) as {
               choices?: { delta?: { content?: string } }[];
               usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+              x_groq?: { usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number } };
             };
 
             const content = parsed.choices?.[0]?.delta?.content ?? "";
-            if (parsed.usage) {
-              promptTokens = parsed.usage.prompt_tokens;
-              completionTokens = parsed.usage.completion_tokens;
+            const usage = parsed.usage ?? parsed.x_groq?.usage;
+            if (usage) {
+              promptTokens = usage.prompt_tokens;
+              completionTokens = usage.completion_tokens;
             }
 
             if (content) {

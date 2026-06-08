@@ -249,12 +249,14 @@ console.log(deletedCount);   // 47 — 47 interactions compressed into 1 summary
 **Custom summarization prompt:**
 
 ```typescript
-import { Summarizer } from "@memstack/core";
-
-const summarizer = new Summarizer(llm, 
-  "You are an enterprise support memory compressor. Highlight: customer name, 
-   product, severity, resolution status, and any open issues."
-);
+const ms = new MemStack({
+  llm,
+  defaults: {
+    summarizationPrompt:
+      "You are an enterprise support memory compressor. Highlight: customer name,
+       product, severity, resolution status, and any open issues.",
+  },
+});
 ```
 
 ### 5. Prune
@@ -277,7 +279,7 @@ await ms.memory.prune({ type: "byType", memoryTypes: ["observation"] });
 // Custom logic
 await ms.memory.prune({
   type: "custom",
-  predicate: (memory) => memory.content.includes("[RESOLVED]"),
+  shouldRemove: (memory) => memory.content.includes("[RESOLVED]"),
 });
 
 // Dry run first — see what would be removed
@@ -549,11 +551,9 @@ const ms = new MemStack({
   embedding?: EmbeddingProvider,       // Optional — for semantic search
   storage?: StorageProvider,           // Optional — defaults to InMemoryStorage
   defaults?: {
-    maxMemoriesPerActor?: number,      // Hard cap
     summarizationThreshold?: number,   // Auto-summarize every N interactions. Default: 100
     embedOnStore?: boolean,            // Auto-embed on store(). Default: true
     pruneStrategy?: PruneStrategy,     // Auto-prune on every store(). Default: disabled
-    importanceDecayRate?: number,      // Importance decay per day. Default: 0.01
   },
   hooks?: {
     onMemoryStored?: (memory: Memory) => void;
@@ -696,7 +696,7 @@ git clone https://github.com/isiomaC/memstack.git
 cd memstack
 pnpm install
 
-pnpm test           # 14 tests, no external services needed
+pnpm test           # 56 tests, no external services needed
 pnpm test:watch     # Watch mode
 pnpm build          # CJS + ESM + type declarations
 pnpm check          # TypeScript type-check only
@@ -724,7 +724,7 @@ const ms = new MemStack({
 | Empty retrieval results | Wrong `actorId` or no memories stored | Check `await ms.memory.count({ actorId })` |
 | Semantic search not working | No embedding adapter or `embedOnStore: false` | Add embedding adapter or use `strategy: "recent"` |
 | High memory usage in production | Using InMemoryStorage | Implement `StorageProvider` for Postgres/Redis/etc |
-| Poor summarization quality | Default prompt doesn't match your domain | Pass custom prompt to `Summarizer` constructor |
+| Poor summarization quality | Default prompt doesn't match your domain | Use `summarizationPrompt` in `defaults` config |
 
 **Inspecting state at runtime:**
 

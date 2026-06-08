@@ -4,9 +4,7 @@ export type MemStackErrorCode =
   | "LLM_ERROR"
   | "VALIDATION_ERROR"
   | "NOT_FOUND"
-  | "CONFIG_ERROR"
-  | "QUEST_ERROR"
-  | "RELATIONSHIP_ERROR";
+  | "CONFIG_ERROR";
 
 export class MemStackError extends Error {
   code: MemStackErrorCode;

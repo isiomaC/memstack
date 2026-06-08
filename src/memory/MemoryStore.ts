@@ -20,6 +20,7 @@ export interface MemoryStoreConfig {
   embedding?: EmbeddingProvider;
   llm?: LLMProvider;
   embedOnStore?: boolean;
+  summarizationPrompt?: string;
 }
 
 const EMBEDDING_BATCH_SIZE = 2048;
@@ -37,35 +38,78 @@ export class MemoryStore {
     this.embedding = config.embedding;
     this.embedOnStore = config.embedOnStore ?? true;
     if (config.llm) {
-      this.summarizer = new Summarizer(config.llm);
+      this.summarizer = new Summarizer(config.llm, config.summarizationPrompt);
     }
     this.pruner = new Pruner();
     this.compiler = new ContextCompiler();
   }
 
   async store(input: MemoryStoreInput): Promise<Memory> {
+    // On conflict "append": deduplicate by content hash, update existing instead
+    if (input.onConflict === "append") {
+      const hash = this._hashContent(input.actorId, input.content);
+      const existing = await this.storage.retrieve({ actorId: input.actorId, limit: 1000 });
+      const match = existing.find(
+        (m) => this._hashContent(m.actorId, m.content) === hash
+      );
+      if (match) {
+        // Upsert: update existing instead of creating duplicate
+        const mergedTags = [...new Set([...(match.tags ?? []), ...(input.tags ?? [])])];
+        const updated = await this.storage.store({
+          id: match.id,
+          actorId: match.actorId,
+          content: match.content,
+          memoryType: match.memoryType,
+          importance: input.importance ?? match.importance,
+          emotionalValence: input.emotionalValence ?? match.emotionalValence,
+          tags: mergedTags,
+          embedding: match.embedding,
+          sourceId: input.sourceId ?? match.sourceId,
+          metadata: { ...match.metadata, ...input.metadata },
+          expiresAt: input.expiresAt ?? match.expiresAt,
+        });
+        return updated;
+      }
+    }
+
     let withEmbedding = input;
     if (this.embedding && this.embedOnStore) {
       const embeddings = await this.embedding.embed([input.content]);
       withEmbedding = { ...input, embedding: embeddings[0] };
     }
-    return this.storage.store(withEmbedding);
+    const { onConflict: _, ...clean } = withEmbedding;
+    return this.storage.store(clean);
   }
 
   async storeBatch(inputs: MemoryStoreInput[]): Promise<Memory[]> {
-    if (this.embedding && this.embedOnStore && inputs.length > 0) {
-      const results: Memory[] = [];
-      for (let i = 0; i < inputs.length; i += EMBEDDING_BATCH_SIZE) {
-        const batch = inputs.slice(i, i + EMBEDDING_BATCH_SIZE);
+    // Handle onConflict: "append" inputs individually (they need dedup checks)
+    const appendInputs = inputs.filter((i) => i.onConflict === "append");
+    const normalInputs = inputs.filter((i) => i.onConflict !== "append");
+
+    const results: Memory[] = [];
+
+    // Process append inputs one-by-one through store() for dedup
+    for (const input of appendInputs) {
+      results.push(await this.store(input));
+    }
+
+    if (normalInputs.length === 0) return results;
+
+    if (this.embedding && this.embedOnStore) {
+      for (let i = 0; i < normalInputs.length; i += EMBEDDING_BATCH_SIZE) {
+        const batch = normalInputs.slice(i, i + EMBEDDING_BATCH_SIZE);
         const texts = batch.map((inp) => inp.content);
         const embeddings = await this.embedding!.embed(texts);
         const enriched = batch.map((input, j) => ({ ...input, embedding: embeddings[j] }));
         const stored = await this.storage.storeBatch(enriched);
         results.push(...stored);
       }
-      return results;
+    } else {
+      const stored = await this.storage.storeBatch(normalInputs);
+      results.push(...stored);
     }
-    return this.storage.storeBatch(inputs);
+
+    return results;
   }
 
   async get(id: string): Promise<Memory | null> {
@@ -83,6 +127,10 @@ export class MemoryStore {
   async touch(id: string): Promise<void> {
     const memory = await this.storage.get(id);
     if (!memory) throw notFound("Memory", id);
+    if (this.storage.touch) {
+      return this.storage.touch(id);
+    }
+    // legacy fallback: storage doesn't support in-place touch
     await this.storage.delete(id);
     await this.storage.store({
       actorId: memory.actorId,
@@ -203,5 +251,16 @@ export class MemoryStore {
 
   async export(): Promise<Memory[]> {
     return this.storage.retrieve({ limit: 100000 });
+  }
+
+  private _hashContent(actorId: string, content: string): string {
+    const normalized = `${actorId}::${content.toLowerCase().trim()}`;
+    // FNV-1a 64-bit — fast, low collision probability for content dedup
+    let hash = 14695981039346656037n; // FNV offset basis
+    for (let i = 0; i < normalized.length; i++) {
+      hash ^= BigInt(normalized.charCodeAt(i));
+      hash *= 1099511628211n; // FNV prime
+    }
+    return hash.toString(36);
   }
 }
