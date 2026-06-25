@@ -1,6 +1,6 @@
 // ── Memory ──
 
-export type MemoryType = "interaction" | "summary" | "observation" | "gossip";
+export type MemoryType = "interaction" | "summary" | "observation" | "fact" | "reflection";
 
 export interface Memory {
   id: string;
@@ -24,6 +24,7 @@ export interface CompiledContext {
   recentMemories: Memory[];
   importantMemories: Memory[];
   tokenEstimate: number;
+  messages?: { role: string; content: string }[];
 }
 
 // ── Process Result ──
@@ -47,4 +48,21 @@ export interface HealthStatus {
   storage: boolean;
   llm: boolean;
   embedding: boolean;
+}
+
+// ── Stats ──
+
+export interface MemoryStats {
+  total: number;
+  expired: number;
+  oldest: Date | null;
+  newest: Date | null;
+  avgImportance: number;
+  byType: Record<MemoryType, number>;
+  byActor: Record<string, {
+    count: number;
+    oldest: Date;
+    newest: Date;
+    avgImportance: number;
+  }>;
 }

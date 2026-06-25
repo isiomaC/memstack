@@ -1,5 +1,7 @@
 import type { Memory, ProcessResult, MemoryType } from "./types.js";
 
+export type TokenCounter = (text: string) => number;
+
 // ── Memory ──
 
 export interface MemoryStoreInput {
@@ -28,16 +30,22 @@ export interface MemoryStore {
   count(filter?: MemoryCountFilter): Promise<number>;
   retrieve(query: MemoryRetrieveQuery): Promise<Memory[]>;
   compileContext(options: ContextOptions): Promise<import("./types.js").CompiledContext>;
+  purgeActor(actorId: string): Promise<number>;
   summarize(options: SummarizeOptions, onError?: (err: Error) => void): Promise<{ summary: Memory; deletedCount: number }>;
+  summarizeStream(options: SummarizeOptions): AsyncIterable<{ chunk: string; text: string }>;
+  merge(ids: string[]): Promise<Memory>;
   prune(strategy: PruneStrategy): Promise<{ pruned: string[]; count: number }>;
   dryRunPrune(strategy: PruneStrategy): Promise<{ wouldPrune: string[]; count: number }>;
-  export(): Promise<Memory[]>;
+  export(actorId?: string): Promise<Memory[]>;
+  stats(actorId?: string): Promise<import("./types.js").MemoryStats>;
 }
 
 export interface MemoryCountFilter {
   actorId?: string;
   memoryType?: MemoryType;
   minImportance?: number;
+  createdAfter?: Date;
+  createdBefore?: Date;
 }
 
 export interface MemoryRetrieveQuery {
@@ -47,12 +55,16 @@ export interface MemoryRetrieveQuery {
   tags?: string[];
   limit?: number;
   strategy?: "semantic" | "hybrid" | "recent" | "important";
+  createdAfter?: Date;
+  createdBefore?: Date;
 }
 
 export interface ContextOptions {
   actorId: string;
   maxTokens?: number;
   memoryTypes?: MemoryType[];
+  retrieveStrategy?: "recent" | "important" | "hybrid";
+  format?: "markdown" | "messages";
 }
 
 export interface SummarizeOptions {
@@ -62,16 +74,22 @@ export interface SummarizeOptions {
   targetCount?: number;
   memoryTypes?: MemoryType[];
   keepOriginals?: boolean;
+  /** Maximum memories per LLM call. When exceeded, memories are split into chunks, summarized independently, then recursively merged. Default 50. */
+  chunkSize?: number;
+  /** Per-call override for the summarization system prompt. Falls back to constructor prompt. */
+  prompt?: string;
 }
 
 export interface PruneStrategy {
-  type: "byAge" | "byImportance" | "byCount" | "byType" | "custom";
+  type: "byAge" | "byImportance" | "byCount" | "byType" | "custom" | "compose";
   maxAge?: number;
   minImportance?: number;
   maxPerActor?: number;
   memoryTypes?: MemoryType[];
   /** Custom predicate: return true for memories that should be REMOVED. */
   shouldRemove?: (memory: Memory) => boolean;
+  /** For "compose" type: sub-strategies applied cumulatively (kept memories must pass ALL). */
+  strategies?: PruneStrategy[];
 }
 
 // ── Adapters ──

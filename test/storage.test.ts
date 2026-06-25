@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { InMemoryStorage } from "../src/adapters/storage/memory.js";
+import { InMemoryStorageAdapter } from "../src/adapters/storage/memory.js";
 
-describe("InMemoryStorage", () => {
+describe("InMemoryStorageAdapter", () => {
   it("stores and retrieves a memory", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const mem = await storage.store({
       actorId: "npc_1",
       content: "Hello world",
@@ -21,13 +21,13 @@ describe("InMemoryStorage", () => {
   });
 
   it("returns null for missing memory", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const result = await storage.get("nonexistent");
     expect(result).toBeNull();
   });
 
   it("deletes a memory", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const mem = await storage.store({ actorId: "a", content: "test" });
 
     await storage.delete(mem.id);
@@ -36,7 +36,7 @@ describe("InMemoryStorage", () => {
   });
 
   it("counts by actorId", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     await storage.store({ actorId: "a", content: "1" });
     await storage.store({ actorId: "a", content: "2" });
     await storage.store({ actorId: "b", content: "3" });
@@ -47,7 +47,7 @@ describe("InMemoryStorage", () => {
   });
 
   it("retrieves by strategy", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     await storage.store({ actorId: "a", content: "old", importance: 0.1 });
     await storage.store({ actorId: "a", content: "important", importance: 0.9 });
 
@@ -62,7 +62,7 @@ describe("InMemoryStorage", () => {
   });
 
   it("retrieves by query text", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     await storage.store({ actorId: "a", content: "The goblin attacked" });
     await storage.store({ actorId: "a", content: "A dragon appeared" });
 
@@ -76,7 +76,7 @@ describe("InMemoryStorage", () => {
   });
 
   it("stores batch", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const results = await storage.storeBatch([
       { actorId: "a", content: "one" },
       { actorId: "a", content: "two" },

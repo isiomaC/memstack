@@ -1,12 +1,12 @@
 import type { Memory, MemoryType } from "../../types.js";
 import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "../../interfaces.js";
-import { storageError, notFound } from "../../errors.js";
+import { notFound } from "../../errors.js";
 
 interface MemoryRecord extends Memory {
   _touchedAt: Date;
 }
 
-export class InMemoryStorage implements StorageProvider {
+export class InMemoryStorageAdapter implements StorageProvider {
   private memories: Map<string, MemoryRecord> = new Map();
 
   async initialize(): Promise<void> {}
@@ -89,6 +89,12 @@ export class InMemoryStorage implements StorageProvider {
     if (query.query) {
       const q = query.query.toLowerCase();
       results = results.filter((m) => m.content.toLowerCase().includes(q));
+    }
+    if (query.createdAfter) {
+      results = results.filter((m) => m.createdAt >= query.createdAfter!);
+    }
+    if (query.createdBefore) {
+      results = results.filter((m) => m.createdAt <= query.createdBefore!);
     }
 
     switch (query.strategy) {

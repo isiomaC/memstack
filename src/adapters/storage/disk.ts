@@ -13,9 +13,10 @@ export interface DiskStorageConfig {
   storageDir?: string;
 }
 
-export class DiskStorage implements StorageProvider {
+export class DiskStorageAdapter implements StorageProvider {
   private dir: string;
   private _writeLocks = new Map<string, Promise<void>>();
+  private _idIndex = new Map<string, string>();
 
   constructor(config: DiskStorageConfig = {}) {
     this.dir = config.storageDir ?? "./memstack-data";
@@ -23,6 +24,7 @@ export class DiskStorage implements StorageProvider {
 
   async initialize(): Promise<void> {
     await mkdir(this.dir, { recursive: true });
+    await this._buildIndex();
   }
 
   generateId(): string {
@@ -55,6 +57,7 @@ export class DiskStorage implements StorageProvider {
       } else {
         records.push(memory);
       }
+      this._idIndex.set(memory.id, input.actorId);
       await this._writeFile(input.actorId, records);
     });
 
@@ -98,6 +101,7 @@ export class DiskStorage implements StorageProvider {
           } else {
             existing.push(mem);
           }
+          this._idIndex.set(mem.id, actorId);
         }
         await this._writeFile(actorId, existing);
       });
@@ -107,11 +111,21 @@ export class DiskStorage implements StorageProvider {
   }
 
   async get(id: string): Promise<Memory | null> {
-    const actorIds = await this._listActors();
-    for (const actorId of actorIds) {
+    const actorId = this._idIndex.get(id);
+    if (actorId) {
       const records = await this._readFile(actorId);
       const record = records.find((r) => r.id === id);
       if (record) {
+        if (record.expiresAt && new Date(record.expiresAt) <= new Date()) return null;
+        return this._toExternal(record);
+      }
+    }
+    const actorIds = await this._listActors();
+    for (const aid of actorIds) {
+      const records = await this._readFile(aid);
+      const record = records.find((r) => r.id === id);
+      if (record) {
+        this._idIndex.set(id, aid);
         if (record.expiresAt && new Date(record.expiresAt) <= new Date()) return null;
         return this._toExternal(record);
       }
@@ -120,23 +134,29 @@ export class DiskStorage implements StorageProvider {
   }
 
   async delete(id: string): Promise<void> {
-    const actorIds = await this._listActors();
-    for (const actorId of actorIds) {
-      const records = await this._readFile(actorId);
-      const index = records.findIndex((r) => r.id === id);
-      if (index !== -1) {
-        await this._withWriteLock(actorId, async () => {
-          const fresh = await this._readFile(actorId);
-          const i = fresh.findIndex((r) => r.id === id);
-          if (i !== -1) {
-            fresh.splice(i, 1);
-            await this._writeFile(actorId, fresh);
-          }
-        });
-        return;
+    let actorId = this._idIndex.get(id);
+    if (!actorId) {
+      const actorIds = await this._listActors();
+      for (const aid of actorIds) {
+        const records = await this._readFile(aid);
+        if (records.some((r) => r.id === id)) { actorId = aid; break; }
       }
     }
-    throw notFound("Memory", id);
+    if (!actorId) throw notFound("Memory", id);
+
+    let deleted = false;
+    await this._withWriteLock(actorId, async () => {
+      const fresh = await this._readFile(actorId);
+      const i = fresh.findIndex((r) => r.id === id);
+      if (i !== -1) {
+        fresh.splice(i, 1);
+        this._idIndex.delete(id);
+        await this._writeFile(actorId, fresh);
+        deleted = true;
+      }
+    });
+
+    if (!deleted) throw notFound("Memory", id);
   }
 
   async deleteMany(ids: string[]): Promise<number> {
@@ -151,6 +171,9 @@ export class DiskStorage implements StorageProvider {
         const filtered = records.filter((r) => !idSet.has(r.id));
         count += before - filtered.length;
         if (before !== filtered.length) {
+          for (const r of records) {
+            if (idSet.has(r.id)) this._idIndex.delete(r.id);
+          }
           await this._writeFile(actorId, filtered);
         }
       });
@@ -246,24 +269,17 @@ export class DiskStorage implements StorageProvider {
   }
 
   async touch(id: string): Promise<void> {
-    const actorIds = await this._listActors();
-    for (const actorId of actorIds) {
-      const records = await this._readFile(actorId);
-      const found = records.find((r) => r.id === id);
-      if (found) {
-        const nowStr = new Date().toISOString();
-        await this._withWriteLock(actorId, async () => {
-          const fresh = await this._readFile(actorId);
-          const match = fresh.find((r) => r.id === id);
-          if (match) {
-            match._touchedAt = nowStr;
-            await this._writeFile(actorId, fresh);
-          }
-        });
-        return;
-      }
-    }
-    throw notFound("Memory", id);
+    const actorId = this._idIndex.get(id);
+    if (!actorId) throw notFound("Memory", id);
+
+    const nowStr = new Date().toISOString();
+    await this._withWriteLock(actorId, async () => {
+      const fresh = await this._readFile(actorId);
+      const match = fresh.find((r) => r.id === id);
+      if (!match) throw notFound("Memory", id);
+      match._touchedAt = nowStr;
+      await this._writeFile(actorId, fresh);
+    });
   }
 
   async close(): Promise<void> {
@@ -320,6 +336,16 @@ export class DiskStorage implements StorageProvider {
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw storageError(`Failed to list actors: ${(err as Error).message}`);
+    }
+  }
+
+  private async _buildIndex(): Promise<void> {
+    const actorIds = await this._listActors();
+    for (const actorId of actorIds) {
+      const records = await this._readFile(actorId);
+      for (const r of records) {
+        this._idIndex.set(r.id, actorId);
+      }
     }
   }
 

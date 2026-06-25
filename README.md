@@ -83,11 +83,12 @@ Think of it as the open-source alternative to [Mem0](https://mem0.ai/) — plugg
 ## Quick Start
 
 ```typescript
-import { MemStack, OpenAILLMAdapter, OpenAIEmbeddingAdapter } from "@memstack/core";
+import { MemStack, OpenAILLMAdapter, OpenAIEmbeddingAdapter, InMemoryStorageAdapter } from "@memstack/core";
 
 const memstack = new MemStack({
   llm: new OpenAILLMAdapter({ apiKey: process.env.OPENAI_API_KEY! }),
   embedding: new OpenAIEmbeddingAdapter({ apiKey: process.env.OPENAI_API_KEY! }),
+  storage: new InMemoryStorageAdapter(),
 });
 
 // 1. Store what happened
@@ -134,7 +135,7 @@ Every agent interaction becomes a `Memory` with metadata that controls how it's 
 interface Memory {
   id: string;
   actorId: string;               // Who this memory belongs to (user ID, agent ID, session ID)
-  memoryType: MemoryType;        // "interaction" | "summary" | "observation"
+  memoryType: MemoryType;        // "interaction" | "summary" | "observation" | "fact" | "reflection"
   content: string;               // The actual text
   importance: number;            // 0-1 — higher = survives pruning, ranks higher in retrieval
   emotionalValence: number;      // -1 to 1 — for tone-aware retrieval
@@ -403,7 +404,8 @@ const userCount = await ms.memory.count({ actorId: "user-42" });
 | `interaction` | Default. Direct exchanges between agent and user/other agent. | "User asked about billing." |
 | `summary` | Compressed collection of old interactions. Created by `summarize()`. | "Over 3 weeks, user reported 5 login failures..." |
 | `observation` | Passive knowledge — facts, documents, things the agent knows but didn't interact with. | "Company refund policy is 30 days from purchase." |
-| `gossip` | Information about third parties. For multi-agent systems. | "Agent-B told me the user is a power user." |
+| `fact` | Verified knowledge — discrete truths the agent has confirmed. | "The user's subscription tier is Enterprise." |
+| `reflection` | Self-generated insight — the agent thinking about its own experiences. | "I tend to over-explain billing policies — should be more concise." |
 
 Types control retrieval behavior — `compileContext()` treats `interaction` and `summary` differently from `observation`. Use types to separate "what happened" from "what I know."
 
@@ -462,16 +464,17 @@ MemStack is provider-agnostic. Every boundary is an interface — bring your own
 
 ### LLM Adapters
 
-Used by `summarize()` and `compileContext()`. Ships with OpenAI and Anthropic built-in.
+Used by `summarize()` and `compileContext()`. Ships with OpenAI, Anthropic, Ollama, and Groq built-in — and via `baseURL`, the OpenAI adapter works with **any OpenAI-compatible API** (DeepSeek, Mistral, Gemini, Together AI, Perplexity, Fireworks, xAI, and dozens more).
 
 ```typescript
 // OpenAI
 import { OpenAILLMAdapter } from "@memstack/core";
-const llm = new OpenAILLMAdapter({
-  apiKey: process.env.OPENAI_API_KEY!,
-  defaultModel: "gpt-4o-mini",        // default
-  baseURL: "https://api.openai.com/v1", // for proxies like LiteLLM
-});
+const llm = new OpenAILLMAdapter({ apiKey: "..." });
+
+// Any OpenAI-compatible API — just change baseURL
+const deepseek = new OpenAILLMAdapter({ apiKey: "...", baseURL: "https://api.deepseek.com/v1" });
+const mistral = new OpenAILLMAdapter({ apiKey: "...", baseURL: "https://api.mistral.ai/v1" });
+const together = new OpenAILLMAdapter({ apiKey: "...", baseURL: "https://api.together.xyz/v1" });
 
 // Anthropic
 import { AnthropicLLMAdapter } from "@memstack/core";
@@ -480,62 +483,147 @@ const llm = new AnthropicLLMAdapter({
   defaultModel: "claude-sonnet-4-5-20250929",
 });
 
-// Ollama (custom — implement LLMProvider)
-import type { LLMProvider } from "@memstack/core";
-class OllamaAdapter implements LLMProvider {
-  constructor(private baseURL = "http://localhost:11434") {}
-  async complete(req: { system: string; user: string; model?: string }) {
-    const res = await fetch(`${this.baseURL}/api/generate`, {
-      method: "POST",
-      body: JSON.stringify({ model: req.model ?? "llama3.2", prompt: `${req.system}\n\n${req.user}`, stream: false }),
-    });
-    const data = await res.json() as { response: string };
-    return { text: data.response, tokens: { prompt: 0, completion: 0, total: 0 } };
-  }
-}
+// Ollama (built-in)
+import { OllamaLLMAdapter } from "@memstack/core";
+const llm = new OllamaLLMAdapter({
+  baseURL: "http://localhost:11434",
+  defaultModel: "llama3.2",
+});
 ```
 
 ### Embedding Adapters
 
-Used by semantic retrieval. Ships with OpenAI built-in.
+Used by semantic retrieval. Ships with OpenAI and Cohere built-in — and via `baseURL`, the OpenAI adapter works with **any OpenAI-compatible embedding API** (Together AI, Voyage AI, Jina, Nomic, and more).
 
 ```typescript
-import { OpenAIEmbeddingAdapter } from "@memstack/core";
-const embedding = new OpenAIEmbeddingAdapter({
-  apiKey: process.env.OPENAI_API_KEY!,
-  model: "text-embedding-3-small",  // 1536 dimensions (default)
-  // model: "text-embedding-3-large", // 3072 dimensions
-});
+import { OpenAIEmbeddingAdapter, CohereEmbeddingAdapter } from "@memstack/core";
+
+// OpenAI
+new OpenAIEmbeddingAdapter({ apiKey: "...", model: "text-embedding-3-small" }); // 1536 dims
+
+// Cohere
+new CohereEmbeddingAdapter({ apiKey: "..." }); // embed-english-v3.0, 1024 dims
+
+// Any OpenAI-compatible embedding API
+new OpenAIEmbeddingAdapter({ apiKey: "...", baseURL: "https://api.voyageai.com/v1", model: "voyage-3" });
 ```
 
 ### Storage Adapters
 
-Ships with `InMemoryStorage` (zero setup, data lost on restart). For production, implement `StorageProvider` for your database.
+MemStack ships with **11 production-ready storage adapters (7 experimental)** — every major backend, zero peer dependencies, all client-injected.
 
-```typescript
-import { InMemoryStorage } from "@memstack/core";
-const storage = new InMemoryStorage();
+**Built-in (zero external deps):**
+| Adapter | Backend | Use case |
+|---|---|---|
+| `InMemoryStorageAdapter` | In-memory Map | Testing, prototyping |
+| `DiskStorageAdapter` | Local JSON files | Simple local persistence |
+| `MarkdownStorageAdapter` | Append-only .md files | Human-readable, git-diffable, debug-friendly |
+| `HybridStorageAdapter` | Compose any two StorageProviders | Cache + durable, edge + durable |
+
+**Relational / SQL:**
+| Adapter | Backend | Vector search |
+|---|---|---|
+| `PostgresStorageAdapter` | PostgreSQL + pgvector | HNSW native |
+| `SQLiteStorageAdapter` | SQLite (better-sqlite3) | In-memory cosine |
+| `TursoStorageAdapter` | Turso (libsql) | DiskANN native |
+
+**Aggregators:**
+| Adapter | Delegates to |
+|---|---|
+| `Mem0StorageAdapter` | Mem0 OSS or Cloud |
+| `ZepStorageAdapter` | Zep Cloud or Community Edition |
+
+**Vector databases:**
+| Adapter | Backend |
+|---|---|
+| `QdrantStorageAdapter` | Qdrant |
+| `PineconeStorageAdapter` | Pinecone |
+| `ChromaStorageAdapter` | ChromaDB |
+| `WeaviateStorageAdapter` | Weaviate |
+| `LanceDBStorageAdapter` | LanceDB |
+| `MongoDBStorageAdapter` | MongoDB Atlas Vector Search |
+
+**Cache / KV:**
+| Adapter | Backend |
+|---|---|
+| `RedisStorageAdapter` | Redis (ioredis) |
+| `UpstashStorageAdapter` | Upstash Redis + Vector |
+
+**Graph:**
+| Adapter | Backend |
+|---|---|
+| `Neo4jStorageAdapter` | Neo4j |
+
+**Quick-start per backend:**
+
+```ts
+// Postgres
+import { PostgresStorageAdapter } from "@memstack/core";
+const storage = new PostgresStorageAdapter({ connectionString: "postgres://..." });
+
+// SQLite
+import Database from "better-sqlite3";
+import { SQLiteStorageAdapter } from "@memstack/core";
+const storage = new SQLiteStorageAdapter({ db: new Database("memory.db") });
+
+// Redis
+import Redis from "ioredis";
+import { RedisStorageAdapter } from "@memstack/core";
+const storage = new RedisStorageAdapter({ redis: new Redis() });
+
+// Markdown (append-only, human-readable)
+import { MarkdownStorageAdapter } from "@memstack/core";
+const storage = new MarkdownStorageAdapter({ dir: "./memories" });
+
+// Hybrid (Redis cache + Postgres durable)
+import { HybridStorageAdapter } from "@memstack/core";
+const storage = new HybridStorageAdapter({
+  cache: new RedisStorageAdapter({ redis: new Redis() }),
+  durable: new PostgresStorageAdapter({ connectionString: "postgres://..." }),
+});
 ```
 
-**Custom storage** — implement `StorageProvider`:
-
-```typescript
+**Custom storage:**
+```ts
 import type { StorageProvider, MemoryStoreInput } from "@memstack/core";
 
-class PostgresStorage implements StorageProvider {
-  async store(input: MemoryStoreInput): Promise<Memory> { /* INSERT */ }
-  async get(id: string): Promise<Memory | null> { /* SELECT */ }
-  async retrieve(query: MemoryRetrieveQuery, embedding?: number[]): Promise<Memory[]> { /* SELECT + filters */ }
-  async count(filter?: MemoryCountFilter): Promise<number> { /* SELECT COUNT */ }
-  async delete(id: string): Promise<void> { /* DELETE */ }
-  async deleteMany(ids: string[]): Promise<number> { /* DELETE batch */ }
-  async storeBatch(inputs: MemoryStoreInput[]): Promise<Memory[]> { /* INSERT batch */ }
-  async initialize(): Promise<void> { /* CREATE TABLE */ }
-  async close(): Promise<void> { /* close pool */ }
+class MyStorage implements StorageProvider {
+  async store(input: MemoryStoreInput): Promise<Memory> { /* ... */ }
+  async get(id: string): Promise<Memory | null> { /* ... */ }
+  async retrieve(query: MemoryRetrieveQuery, embedding?: number[]): Promise<Memory[]> { /* ... */ }
+  async count(filter?: MemoryCountFilter): Promise<number> { /* ... */ }
+  async delete(id: string): Promise<void> { /* ... */ }
+  async deleteMany(ids: string[]): Promise<number> { /* ... */ }
+  async storeBatch(inputs: MemoryStoreInput[]): Promise<Memory[]> { /* ... */ }
+  async initialize(): Promise<void> { /* ... */ }
+  async close(): Promise<void> { /* ... */ }
 }
 ```
 
-See `src/adapters/storage/memory.ts` for a complete reference implementation.
+---
+
+## Backend Comparison
+
+| Backend | Vector search | Touch | Best for |
+|---|---|---|---|
+| InMemory | Cosine in-memory | Yes | Testing, prototyping |
+| Disk (JSON) | Keyword + importance | Yes | Simple local persistence |
+| Markdown | Keyword + importance | No | Human-readable, git-diffable |
+| Postgres | pgvector HNSW | Yes | Production relational |
+| SQLite | Cosine in-memory | Yes | Local dev, solo apps |
+| Turso | DiskANN native | Yes | Edge/serverless |
+| Redis | RediSearch KNN (auto-detect) | Yes | Sub-5ms hot session state |
+| Upstash | Native vector (vector mode) | No | CF Workers, Vercel Edge |
+| Qdrant | ANN native | No | Best filtered search |
+| Pinecone | ANN native | No | Zero-ops managed |
+| Chroma | Native | No | LangChain prototyping |
+| Weaviate | BM25 + vector hybrid | No | Hybrid search |
+| LanceDB | DiskANN native | No | Embedded local vector |
+| MongoDB | Atlas Vector Search | No | Existing MongoDB deployments |
+| Neo4j | Neo4j vector index | No | Relationship-aware agents |
+| Hybrid | Delegates to cache/durable | If durable supports | Read-through cache pattern |
+| Mem0 | Delegates to Mem0 | No | Multi-backend via Mem0 |
+| Zep | Graphiti temporal graph | No | Temporal graph memory |
 
 ---
 
@@ -549,7 +637,7 @@ import { MemStack } from "@memstack/core";
 const ms = new MemStack({
   llm: LLMProvider,                    // Required — for summarization
   embedding?: EmbeddingProvider,       // Optional — for semantic search
-  storage?: StorageProvider,           // Optional — defaults to InMemoryStorage
+  storage?: StorageProvider,           // Optional — defaults to InMemoryStorageAdapter
   defaults?: {
     summarizationThreshold?: number,   // Auto-summarize every N interactions. Default: 100
     embedOnStore?: boolean,            // Auto-embed on store(). Default: true
@@ -696,7 +784,7 @@ git clone https://github.com/isiomaC/memstack.git
 cd memstack
 pnpm install
 
-pnpm test           # 56 tests, no external services needed
+pnpm test           # 393 tests, no external services needed
 pnpm test:watch     # Watch mode
 pnpm build          # CJS + ESM + type declarations
 pnpm check          # TypeScript type-check only
@@ -723,7 +811,7 @@ const ms = new MemStack({
 | `CONFIG_ERROR: LLM provider is required` | No LLM adapter | Pass any `LLMProvider` to config |
 | Empty retrieval results | Wrong `actorId` or no memories stored | Check `await ms.memory.count({ actorId })` |
 | Semantic search not working | No embedding adapter or `embedOnStore: false` | Add embedding adapter or use `strategy: "recent"` |
-| High memory usage in production | Using InMemoryStorage | Implement `StorageProvider` for Postgres/Redis/etc |
+| High memory usage in production | Using InMemoryStorageAdapter | Implement `StorageProvider` for Postgres/Redis/etc |
 | Poor summarization quality | Default prompt doesn't match your domain | Use `summarizationPrompt` in `defaults` config |
 
 **Inspecting state at runtime:**
@@ -759,11 +847,11 @@ The `@memstack` scope requires `--access public` on first publish.
 
 Most needed contributions:
 
-- **Storage adapters**: Postgres, Redis, SQLite, filesystem
-- **LLM adapters**: Ollama, Groq, Together AI, Gemini
-- **Embedding adapters**: Cohere, Voyage AI, local transformers.js
-- **Tests**: Edge cases, concurrent access, large-scale benchmarks
-- **Docs**: Architecture diagrams, tutorials
+- **Docker Compose** for integration testing
+- **LLM adapters**: Google Gemini (native), Amazon Bedrock, Vertex AI
+- **Embedding adapters**: local inference (transformers.js, ONNX)
+- **Benchmarks**: retrieval quality, latency, cost comparisons
+- **Python port**: `pip install memstack`
 
 Open an issue or PR at [github.com/isiomaC/memstack](https://github.com/isiomaC/memstack).
 

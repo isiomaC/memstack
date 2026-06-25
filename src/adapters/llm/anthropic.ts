@@ -1,6 +1,18 @@
 import type { LLMProvider } from "../../interfaces.js";
 import { MemStackError } from "../../errors.js";
 
+interface AnthropicSDK {
+  messages: {
+    create(params: {
+      model: string;
+      max_tokens: number;
+      temperature?: number;
+      system: string;
+      messages: { role: string; content: string }[];
+    }): Promise<{ content: { text: string }[]; usage?: { input_tokens: number; output_tokens: number } }>;
+  };
+}
+
 export interface AnthropicLLMConfig {
   apiKey: string;
   baseURL?: string;
@@ -13,8 +25,7 @@ export class AnthropicLLMAdapter implements LLMProvider {
   private baseURL: string;
   private defaultModel: string;
   private defaultMaxTokens: number;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private sdk: any;
+  private sdk?: AnthropicSDK;
 
   constructor(config: AnthropicLLMConfig) {
     this.apiKey = config.apiKey;
@@ -35,11 +46,13 @@ export class AnthropicLLMAdapter implements LLMProvider {
 
     try {
       if (!this.sdk) {
+        // @ts-expect-error — optional peer dep
         const { default: Anthropic } = await import("@anthropic-ai/sdk");
-        this.sdk = new Anthropic({ apiKey: this.apiKey, baseURL: this.baseURL });
+        this.sdk = new Anthropic({ apiKey: this.apiKey, baseURL: this.baseURL }) as AnthropicSDK;
       }
 
-      const response = await this.sdk.messages.create({
+      const sdk = this.sdk;
+      const response = await sdk.messages.create({
         model,
         system: request.system,
         messages: [{ role: "user", content: request.user }],

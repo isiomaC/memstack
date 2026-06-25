@@ -1,16 +1,15 @@
 import type { Memory, MemoryType } from "../../types.js";
 import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "../../interfaces.js";
-import { storageError, notFound } from "../../errors.js";
+import { notFound } from "../../errors.js";
 
-// Type-only import — user provides their own ioredis instance
 type RedisClient = {
   set(key: string, value: string): Promise<unknown>;
   get(key: string): Promise<string | null>;
-  mget(...keys: string[]): Promise<(string | null)[]>;
   del(key: string | string[]): Promise<number>;
   sadd(key: string, ...members: string[]): Promise<number>;
   srem(key: string, ...members: string[]): Promise<number>;
   smembers(key: string): Promise<string[]>;
+  mget(...keys: string[]): Promise<(string | null)[]>;
 };
 
 interface MemoryRecord extends Memory {
@@ -18,23 +17,20 @@ interface MemoryRecord extends Memory {
 }
 
 export interface RedisStorageConfig {
-  /** An active ioredis client instance (or compatible) */
   redis: RedisClient;
-  /** Key prefix. Default: "memstack" */
   keyPrefix?: string;
 }
 
-export class RedisStorage implements StorageProvider {
+export class RedisStorageAdapter implements StorageProvider {
   private redis: RedisClient;
   private prefix: string;
-
   constructor(config: RedisStorageConfig) {
     this.redis = config.redis;
     this.prefix = config.keyPrefix ?? "memstack";
   }
 
   async initialize(): Promise<void> {
-    // Connection managed by the user's Redis client
+    // Connection is user-managed; no-op
   }
 
   generateId(): string {
@@ -67,7 +63,7 @@ export class RedisStorage implements StorageProvider {
   }
 
   async storeBatch(inputs: MemoryStoreInput[]): Promise<Memory[]> {
-    let results: Memory[] = [];
+    const results: Memory[] = [];
     const now = new Date();
 
     for (const input of inputs) {
@@ -137,6 +133,15 @@ export class RedisStorage implements StorageProvider {
     return count;
   }
 
+  async touch(id: string): Promise<void> {
+    const raw = await this.redis.get(this._memKey(id));
+    if (!raw) throw notFound("Memory", id);
+
+    const record = JSON.parse(raw) as MemoryRecord;
+    record._touchedAt = new Date().toISOString();
+    await this.redis.set(this._memKey(id), JSON.stringify(record));
+  }
+
   async retrieve(query: MemoryRetrieveQuery, _embedding?: number[]): Promise<Memory[]> {
     let allRecords: MemoryRecord[] = [];
 
@@ -181,7 +186,6 @@ export class RedisStorage implements StorageProvider {
         break;
     }
 
-    // Touch records on retrieval
     const nowStr = new Date().toISOString();
     const toTouch = results.slice(0, query.limit ?? 10);
     for (const r of toTouch) {
@@ -220,10 +224,7 @@ export class RedisStorage implements StorageProvider {
   }
 
   async close(): Promise<void> {
-    // User manages connection lifecycle
   }
-
-  // ── Internal ──
 
   private _actorsSetKey(): string {
     return `${this.prefix}:actors`;

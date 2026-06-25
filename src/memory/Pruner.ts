@@ -15,6 +15,8 @@ export class Pruner {
         return this.removeByType(memories, strategy);
       case "custom":
         return this.removeCustom(memories, strategy);
+      case "compose":
+        return this.keepCompose(memories, strategy);
       default:
         return memories;
     }
@@ -62,5 +64,18 @@ export class Pruner {
   private removeCustom(memories: Memory[], strategy: PruneStrategy): Memory[] {
     if (!strategy.shouldRemove) return memories;
     return memories.filter((m) => !strategy.shouldRemove!(m));
+  }
+
+  /** Apply sub-strategies cumulatively: kept memories must pass ALL. */
+  private keepCompose(memories: Memory[], strategy: PruneStrategy): Memory[] {
+    if (!strategy.strategies || strategy.strategies.length === 0) {
+      return memories;
+    }
+
+    let kept = memories;
+    for (const sub of strategy.strategies) {
+      kept = this.execute(kept, sub);
+    }
+    return kept;
   }
 }

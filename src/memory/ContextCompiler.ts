@@ -1,17 +1,24 @@
 import type { Memory, CompiledContext } from "../types.js";
-import type { ContextOptions } from "../interfaces.js";
+import type { ContextOptions, TokenCounter } from "../interfaces.js";
 
 export class ContextCompiler {
-  /**
-   * Estimate token count from text using a blended heuristic.
-   * Combines word-based (prose) and character-based (code/json) estimates,
-   * taking the max to handle arbitrary content types.
-   */
-  private estimateTokens(text: string): number {
+  private tokenCounter: TokenCounter;
+  private importantRatio: number;
+
+  constructor(tokenCounter?: TokenCounter, importantRatio?: number) {
+    this.tokenCounter = tokenCounter ?? this._heuristicTokens.bind(this);
+    this.importantRatio = importantRatio ?? 0.6;
+  }
+
+  private _heuristicTokens(text: string): number {
     const charEst = Math.ceil(text.length / 4);
     const words = text.split(/\s+/).filter((w) => w.length > 0);
     const wordEst = Math.ceil(words.length * 1.3);
     return Math.max(charEst, Math.max(1, wordEst));
+  }
+
+  private estimateTokens(text: string): number {
+    return this.tokenCounter(text);
   }
 
   /**
@@ -63,6 +70,16 @@ export class ContextCompiler {
 
     const tokenEstimate = this.estimateTokens(systemPrompt);
 
+    if (options.format === "messages") {
+      return {
+        systemPrompt,
+        messages: [{ role: "system", content: systemPrompt }],
+        recentMemories,
+        importantMemories,
+        tokenEstimate,
+      };
+    }
+
     return { systemPrompt, recentMemories, importantMemories, tokenEstimate };
   }
 
@@ -83,7 +100,7 @@ export class ContextCompiler {
       const suffix = ` (${m.memoryType}, importance: ${m.importance.toFixed(2)})\n`;
       const overhead = this.estimateTokens(prefix + suffix);
       let tokens = this.estimateTokens(m.content) + overhead;
-      const remaining = Math.floor(maxTokens * 0.6) - usedTokens;
+      const remaining = Math.floor(maxTokens * this.importantRatio) - usedTokens;
       if (remaining <= 0) break;
       if (tokens > remaining) {
         const contentBudget = Math.max(0, remaining - overhead);

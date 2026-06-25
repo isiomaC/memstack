@@ -1,16 +1,16 @@
 {
   "name": "@memstack/core",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Open-source AI memory framework — store, retrieve, summarize, and prune memories for LLM agents and games",
   "type": "module",
   "main": "dist/index.js",
-  "module": "dist/index.mjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
   "scripts": {
@@ -18,8 +18,10 @@
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "npx vitest run --config vitest.e2e.config.ts",
+    "test:e2e:run": "bash e2e/run-all.sh",
     "check": "tsc --noEmit",
-    "prepublishOnly": "pnpm build && pnpm check"
+    "prepublishOnly": "pnpm build && pnpm check && pnpm test"
   },
   "keywords": [
     "ai",
@@ -35,27 +37,27 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "peerDependencies": {
-    "openai": "^4.0.0",
-    "@anthropic-ai/sdk": "^0.39.0",
-    "ollama": "^0.5.0"
-  },
-  "peerDependenciesMeta": {
-    "openai": { "optional": true },
-    "@anthropic-ai/sdk": { "optional": true },
-    "ollama": { "optional": true }
-  },
   "devDependencies": {
+    "@qdrant/js-client-rest": "^1.18.0",
+    "@types/node": "^22.0.0",
+    "better-sqlite3": "^11.10.0",
+    "chromadb": "^3.4.3",
+    "ioredis": "^5.11.1",
+    "mongodb": "^7.3.0",
+    "neo4j-driver": "^6.1.0",
+    "pg": "^8.22.0",
     "tsup": "^8.0.0",
     "typescript": "^5.7.0",
+    "vectordb": "^0.21.2",
     "vitest": "^1.0.0",
-    "@types/node": "^22.0.0"
+    "weaviate-client": "^3.13.1"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ]
 }

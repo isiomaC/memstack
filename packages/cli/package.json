@@ -1,0 +1,39 @@
+{
+  "name": "@memstack/cli",
+  "version": "0.1.0",
+  "description": "CLI for MemStack — shell-based agent memory",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "memstack": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
+  "types": "dist/cli.d.ts",
+  "files": ["dist"],
+  "engines": { "node": ">=18.0.0" },
+  "repository": { "type": "git", "url": "https://github.com/memstack/memstack" },
+  "bugs": { "url": "https://github.com/memstack/memstack/issues" },
+  "homepage": "https://github.com/memstack/memstack",
+  "prepublishOnly": "pnpm build && pnpm check && pnpm test",
+  "scripts": {
+    "build": "tsup src/cli.ts --format esm --clean",
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@memstack/core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^1.0.0",
+    "@types/node": "^22.0.0"
+  },
+  "keywords": ["cli", "memory", "ai", "agent", "shell"],
+  "license": "MIT"
+}

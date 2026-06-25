@@ -1,15 +1,11 @@
 import type { Memory, MemoryType } from "../../types.js";
 import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "../../interfaces.js";
-import { storageError, notFound } from "../../errors.js";
+import { notFound, configError } from "../../errors.js";
 
-// User provides their own pg Pool instance
 type PgPool = {
   query(text: string, params?: unknown[]): Promise<{ rows: unknown[] }>;
+  end?: () => Promise<void>;
 };
-
-interface MemoryRecord extends Memory {
-  _touchedAt: string;
-}
 
 interface PgMemoryRow {
   id: string;
@@ -28,30 +24,97 @@ interface PgMemoryRow {
 }
 
 export interface PostgresStorageConfig {
-  /** An active pg Pool instance */
-  pool: PgPool;
-  /** Table name. Default: "memstack_memories" */
+  pool?: PgPool;
+  connectionString?: string;
+  host?: string; port?: number; database?: string; user?: string; password?: string;
   tableName?: string;
-  /** Automatically run CREATE TABLE IF NOT EXISTS on init. Default: true */
-  autoMigrate?: boolean;
+  vectorDimensions?: number;
+  ssl?: boolean | object;
 }
 
-export class PostgresStorage implements StorageProvider {
-  private pool: PgPool;
+export class PostgresStorageAdapter implements StorageProvider {
+  private pool!: PgPool;
   private table: string;
-  private autoMigrate: boolean;
+  private vectorDimensions: number;
+  private _ownsPool = false;
 
   constructor(config: PostgresStorageConfig) {
-    this.pool = config.pool;
     this.table = config.tableName ?? "memstack_memories";
     if (!/^[a-zA-Z0-9_]+$/.test(this.table)) {
-      throw new Error(`Invalid table name: "${this.table}". Use only alphanumeric characters and underscores.`);
+      throw configError(`Invalid table name: "${this.table}". Use only alphanumeric characters and underscores.`);
     }
-    this.autoMigrate = config.autoMigrate ?? true;
+    this.vectorDimensions = config.vectorDimensions ?? 1536;
+
+    if (config.pool) {
+      this.pool = config.pool;
+    } else if (config.connectionString) {
+      this._connectionString = config.connectionString;
+      this._ssl = config.ssl;
+    } else if (config.host || config.database || config.user) {
+      this._connParts = { host: config.host, port: config.port, database: config.database, user: config.user, password: config.password, ssl: config.ssl };
+    } else {
+      throw configError("PostgresStorageAdapter requires a pool, connectionString, or connection details");
+    }
   }
 
+  private _connectionString?: string;
+  private _connParts?: { host?: string; port?: number; database?: string; user?: string; password?: string; ssl?: boolean | object };
+  private _ssl?: boolean | object;
+
   async initialize(): Promise<void> {
-    if (!this.autoMigrate) return;
+    if (this._connectionString || this._connParts) {
+      this.pool = await this._createPool();
+      this._ownsPool = true;
+    }
+
+    await this._runMigration();
+  }
+
+  private async _createPool(): Promise<PgPool> {
+    const connStr = this._connectionString ?? this._buildConnString();
+
+    try {
+      // @ts-expect-error — optional peer dep, user installs 'postgres' (postgres.js) themselves
+      const { default: createPostgres } = await import("postgres");
+      const options: Record<string, unknown> = {};
+      if (this._ssl) {
+        options.ssl = typeof this._ssl === "object" ? this._ssl : "require";
+      }
+      const sql = createPostgres(connStr, options) as { unsafe: (t: string, p: unknown[]) => Promise<unknown[]>; end: () => Promise<void> };
+      return {
+        query: (text: string, params?: unknown[]) =>
+          sql.unsafe(text, params as never[]).then((r: unknown[]) => ({ rows: r })),
+        end: () => sql.end(),
+      };
+    } catch {
+      try {
+        // @ts-expect-error — optional peer dep, user installs 'pg' (node-postgres) themselves
+        const { Pool } = await import("pg");
+        const pool = new Pool({ connectionString: connStr, ssl: this._ssl }) as PgPool & { end: () => Promise<void> };
+        return { query: (text: string, params?: unknown[]) => pool.query(text, params), end: () => pool.end() };
+      } catch {
+        throw configError("connectionString requires 'postgres' (postgres.js) or 'pg' (node-postgres) to be installed");
+      }
+    }
+  }
+
+  private _buildConnString(): string {
+    const p = this._connParts!;
+    const host = p.host ?? "localhost";
+    const port = p.port ?? 5432;
+    const db = p.database ?? "postgres";
+    const user = encodeURIComponent(p.user ?? "postgres");
+    const pw = p.password ? `:${encodeURIComponent(p.password)}` : "";
+    let connStr = `postgres://${user}${pw}@${host}:${port}/${db}`;
+    if (this._ssl) {
+      const sslmode = typeof this._ssl === "object" ? "no-verify" : "require";
+      connStr += `?sslmode=${sslmode}`;
+    }
+    return connStr;
+  }
+
+  private async _runMigration(): Promise<void> {
+    try { await this.pool.query("CREATE EXTENSION IF NOT EXISTS vector"); } catch { /* pgvector may not be available */ }
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS ${this.table} (
         id TEXT PRIMARY KEY,
@@ -61,7 +124,7 @@ export class PostgresStorage implements StorageProvider {
         importance REAL NOT NULL DEFAULT 0.5,
         emotional_valence REAL NOT NULL DEFAULT 0,
         tags JSONB NOT NULL DEFAULT '[]',
-        embedding vector(3072),
+        embedding vector(${this.vectorDimensions}),
         source_id TEXT,
         metadata JSONB NOT NULL DEFAULT '{}',
         expires_at TIMESTAMPTZ,
@@ -69,13 +132,12 @@ export class PostgresStorage implements StorageProvider {
         touched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
-    // Indexes
     try {
       await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_${this.table}_actor ON ${this.table} (actor_id)`);
-      await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_${this.table}_type ON ${this.table} (memory_type)`);
-    } catch {
-      // Index creation may fail; non-critical
-    }
+      await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_${this.table}_created ON ${this.table} (created_at DESC)`);
+      await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_${this.table}_importance ON ${this.table} (importance DESC)`);
+      await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_${this.table}_embedding ON ${this.table} USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)`);
+    } catch { /* index creation may fail; non-critical */ }
   }
 
   generateId(): string {
@@ -164,6 +226,12 @@ export class PostgresStorage implements StorageProvider {
     return rows.length;
   }
 
+  async touch(id: string): Promise<void> {
+    const { rows } = await this.pool.query(`SELECT id FROM ${this.table} WHERE id = $1`, [id]);
+    if (rows.length === 0) throw notFound("Memory", id);
+    await this.pool.query(`UPDATE ${this.table} SET touched_at = NOW() WHERE id = $1`, [id]);
+  }
+
   async retrieve(query: MemoryRetrieveQuery, embedding?: number[]): Promise<Memory[]> {
     const conditions: string[] = ["(expires_at IS NULL OR expires_at > NOW())"];
     const params: unknown[] = [];
@@ -185,6 +253,14 @@ export class PostgresStorage implements StorageProvider {
       conditions.push(`content ILIKE $${paramIdx++}`);
       params.push(`%${query.query}%`);
     }
+    if (query.createdAfter) {
+      conditions.push(`created_at >= $${paramIdx++}`);
+      params.push(query.createdAfter.toISOString());
+    }
+    if (query.createdBefore) {
+      conditions.push(`created_at <= $${paramIdx++}`);
+      params.push(query.createdBefore.toISOString());
+    }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -199,9 +275,8 @@ export class PostgresStorage implements StorageProvider {
       case "hybrid":
       case "semantic":
       default:
-        if (embedding && query.query) {
-          // Semantic: order by vector distance
-          return this._semanticRetrieve(embedding, query, params, where);
+        if (embedding) {
+          return this._semanticRetrieve(embedding, query, params, where, paramIdx);
         }
         orderBy = "importance DESC, touched_at DESC";
         break;
@@ -213,13 +288,9 @@ export class PostgresStorage implements StorageProvider {
 
     const { rows } = await this.pool.query(sql, params);
 
-    // Touch records
     for (const row of rows.slice(0, limit)) {
       const r = row as PgMemoryRow;
-      await this.pool.query(
-        `UPDATE ${this.table} SET touched_at = NOW() WHERE id = $1`,
-        [r.id]
-      );
+      await this.pool.query(`UPDATE ${this.table} SET touched_at = NOW() WHERE id = $1`, [r.id]);
     }
 
     return (rows as PgMemoryRow[]).map((r) => this._rowToMemory(r));
@@ -242,6 +313,14 @@ export class PostgresStorage implements StorageProvider {
       conditions.push(`importance >= $${paramIdx++}`);
       params.push(filter.minImportance);
     }
+    if (filter?.createdAfter) {
+      conditions.push(`created_at >= $${paramIdx++}`);
+      params.push(filter.createdAfter.toISOString());
+    }
+    if (filter?.createdBefore) {
+      conditions.push(`created_at <= $${paramIdx++}`);
+      params.push(filter.createdBefore.toISOString());
+    }
 
     const where = conditions.join(" AND ");
     const { rows } = await this.pool.query(
@@ -252,33 +331,41 @@ export class PostgresStorage implements StorageProvider {
   }
 
   async close(): Promise<void> {
-    // User manages pool lifecycle
+    if (this._ownsPool && this.pool?.end) {
+      await this.pool.end();
+    }
   }
-
-  // ── Internal ──
 
   private async _semanticRetrieve(
     embedding: number[],
     query: MemoryRetrieveQuery,
     params: unknown[],
-    baseWhere: string
+    baseWhere: string,
+    paramIdx: number
   ): Promise<Memory[]> {
-    const vecParam = `{${embedding.join(",")}}`;
     const limit = query.limit ?? 10;
-    // baseWhere already includes "WHERE" keyword; strip the prefix
     const conditions = baseWhere.replace(/^WHERE\s+/i, "");
     const whereClause = conditions
       ? `WHERE ${conditions} AND embedding IS NOT NULL`
       : `WHERE embedding IS NOT NULL`;
-    const sql = `
+    const isHybrid = query.strategy === "hybrid";
+    const sql = isHybrid ? `
       SELECT *,
-        (embedding <-> $${params.length + 1}::float8[]::vector) AS distance
+        (embedding <-> $${paramIdx}::float8[]::vector) AS distance,
+        (1.0 - (embedding <-> $${paramIdx}::float8[]::vector) / 2.0 + importance) AS score
+      FROM ${this.table}
+      ${whereClause}
+      ORDER BY score DESC
+      LIMIT $${paramIdx + 1}
+    ` : `
+      SELECT *,
+        (embedding <-> $${paramIdx}::float8[]::vector) AS distance
       FROM ${this.table}
       ${whereClause}
       ORDER BY distance ASC
-      LIMIT $${params.length + 2}
+      LIMIT $${paramIdx + 1}
     `;
-    params.push(vecParam);
+    params.push(embedding);
     params.push(limit);
 
     const { rows } = await this.pool.query(sql, params);

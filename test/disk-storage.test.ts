@@ -1,16 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { DiskStorage } from "../src/adapters/storage/disk.js";
+import { DiskStorageAdapter } from "../src/adapters/storage/disk.js";
 
 const TEST_DIR = join(import.meta.dirname ?? process.cwd(), ".memstack-test");
 
-describe("DiskStorage", () => {
-  let storage: DiskStorage;
+describe("DiskStorageAdapter", () => {
+  let storage: DiskStorageAdapter;
 
   beforeEach(async () => {
     await rm(TEST_DIR, { recursive: true, force: true });
-    storage = new DiskStorage({ storageDir: TEST_DIR });
+    storage = new DiskStorageAdapter({ storageDir: TEST_DIR });
     await storage.initialize();
   });
 
@@ -88,7 +88,7 @@ describe("DiskStorage", () => {
     await storage.store({ actorId: "npc_1", content: "persisted" });
     await storage.close();
 
-    const storage2 = new DiskStorage({ storageDir: TEST_DIR });
+    const storage2 = new DiskStorageAdapter({ storageDir: TEST_DIR });
     await storage2.initialize();
     const count = await storage2.count({ actorId: "npc_1" });
     expect(count).toBe(1);

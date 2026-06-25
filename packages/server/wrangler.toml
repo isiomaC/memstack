@@ -1,0 +1,13 @@
+name = "memstack"
+main = "dist/index.js"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+MEMSTACK_STORAGE = "memory"
+
+# Uncomment for D1:
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "memstack"
+# database_id = ""

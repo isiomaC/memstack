@@ -1,7 +1,7 @@
 import type { Memory, ProcessResult, MemStackSnapshot, HealthStatus } from "./types.js";
 import type { MemStackConfig, ProcessInput, MemoryStoreInput, StorageProvider } from "./interfaces.js";
 import { MemoryStore } from "./memory/MemoryStore.js";
-import { InMemoryStorage } from "./adapters/storage/memory.js";
+import { InMemoryStorageAdapter } from "./adapters/storage/memory.js";
 import { configError, validationError } from "./errors.js";
 
 export class MemStack {
@@ -9,7 +9,8 @@ export class MemStack {
 
   private config: MemStackConfig;
   private storage: StorageProvider;
-  private processCount = 0;
+  private processCounts = new Map<string, number>();
+  private pruneCheckCount = 0;
 
   constructor(config: MemStackConfig) {
     if (!config.llm) {
@@ -17,7 +18,7 @@ export class MemStack {
     }
 
     this.config = config;
-    this.storage = config.storage ?? new InMemoryStorage();
+    this.storage = config.storage ?? new InMemoryStorageAdapter();
 
     this.memory = new MemoryStore({
       storage: this.storage,
@@ -94,14 +95,14 @@ export class MemStack {
 
     const memory = await this.memory.store(memoryInput);
     this.config.hooks?.onMemoryStored?.(memory);
-    this.processCount++;
+
+    const count = (this.processCounts.get(input.actorId) ?? 0) + 1;
+    this.processCounts.set(input.actorId, count);
 
     // Auto-summarize if threshold is hit
     let summaryCreated: Memory | undefined;
     const threshold = this.config.defaults?.summarizationThreshold ?? 100;
-    if (threshold > 0) {
-      const count = await this.memory.count({ actorId: input.actorId, memoryType: "interaction" });
-      if (count % threshold === 0 && count > 0) {
+    if (threshold > 0 && count % threshold === 0) {
         try {
           const result = await this.memory.summarize(
             {
@@ -122,13 +123,13 @@ export class MemStack {
             "summarize"
           );
         }
-      }
     }
 
     // Auto-prune if configured (throttled)
+    this.pruneCheckCount++;
     const pruneStrategy = this.config.defaults?.pruneStrategy;
     const pruneInterval = this.config.defaults?.pruneInterval ?? 100;
-    if (pruneStrategy && this.processCount % pruneInterval === 0) {
+    if (pruneStrategy && this.pruneCheckCount % pruneInterval === 0) {
       try {
         const pruneResult = await this.memory.prune(pruneStrategy);
         if (pruneResult.count > 0) {
@@ -145,8 +146,8 @@ export class MemStack {
     return { memory, summaryCreated };
   }
 
-  async export(): Promise<MemStackSnapshot> {
-    const memories = await this.memory.export();
+  async export(actorId?: string): Promise<MemStackSnapshot> {
+    const memories = await this.memory.export(actorId);
     return {
       version: 1,
       memories,

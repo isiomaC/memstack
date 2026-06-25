@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { MemStack } from "../src/client.js";
 import { MemoryStore } from "../src/memory/MemoryStore.js";
-import { InMemoryStorage } from "../src/adapters/storage/memory.js";
+import { InMemoryStorageAdapter } from "../src/adapters/storage/memory.js";
 import { ContextCompiler } from "../src/memory/ContextCompiler.js";
 
 // ── Helpers ──
@@ -120,7 +120,7 @@ describe("auto-enrichment", () => {
 
 describe("onConflict append", () => {
   it("deduplicates by content hash — returns existing instead of creating duplicate", async () => {
-    const store = new MemoryStore({ storage: new InMemoryStorage() });
+    const store = new MemoryStore({ storage: new InMemoryStorageAdapter() });
     const first = await store.store({ actorId: "a", content: "unique observation", importance: 0.3, tags: ["science"] });
     const second = await store.store({ actorId: "a", content: "unique observation", importance: 0.8, tags: ["repeat"], onConflict: "append" });
 
@@ -135,7 +135,7 @@ describe("onConflict append", () => {
   });
 
   it("stores normally when onConflict not set", async () => {
-    const store = new MemoryStore({ storage: new InMemoryStorage() });
+    const store = new MemoryStore({ storage: new InMemoryStorageAdapter() });
     const first = await store.store({ actorId: "a", content: "duplicate" });
     const second = await store.store({ actorId: "a", content: "duplicate" });
     expect(second.id).not.toBe(first.id);
@@ -143,7 +143,7 @@ describe("onConflict append", () => {
   });
 
   it("storeBatch routes append inputs through dedup", async () => {
-    const store = new MemoryStore({ storage: new InMemoryStorage() });
+    const store = new MemoryStore({ storage: new InMemoryStorageAdapter() });
     const first = await store.store({ actorId: "a", content: "batch dedup" });
     const results = await store.storeBatch([
       { actorId: "a", content: "batch dedup", onConflict: "append" },
@@ -156,15 +156,15 @@ describe("onConflict append", () => {
     expect(await store.count()).toBe(2);
   });
 
-  it("upserts in DiskStorage without duplicate records", async () => {
-    const { DiskStorage } = await import("../src/adapters/storage/disk.js");
+  it("upserts in DiskStorageAdapter without duplicate records", async () => {
+    const { DiskStorageAdapter } = await import("../src/adapters/storage/disk.js");
     const { rm } = await import("node:fs/promises");
     const { join } = await import("node:path");
 
     const dir = join(import.meta.dirname ?? process.cwd(), ".memstack-append-disk-test");
     await rm(dir, { recursive: true, force: true });
 
-    const storage = new DiskStorage({ storageDir: dir });
+    const storage = new DiskStorageAdapter({ storageDir: dir });
     await storage.initialize();
     const store = new MemoryStore({ storage });
 
@@ -232,18 +232,18 @@ describe("ContextCompiler truncation", () => {
   });
 });
 
-// ── DiskStorage touch persistence ──
+// ── DiskStorageAdapter touch persistence ──
 
-describe("DiskStorage touch persistence", () => {
+describe("DiskStorageAdapter touch persistence", () => {
   it("updates _touchedAt on disk after retrieve", async () => {
-    const { DiskStorage } = await import("../src/adapters/storage/disk.js");
+    const { DiskStorageAdapter } = await import("../src/adapters/storage/disk.js");
     const { mkdir, rm, readFile } = await import("node:fs/promises");
     const { join } = await import("node:path");
 
     const dir = join(import.meta.dirname ?? process.cwd(), ".memstack-touch-test");
     await rm(dir, { recursive: true, force: true });
 
-    const storage = new DiskStorage({ storageDir: dir });
+    const storage = new DiskStorageAdapter({ storageDir: dir });
     await storage.initialize();
 
     const mem = await storage.store({ actorId: "a", content: "touch test" });
@@ -266,8 +266,8 @@ describe("DiskStorage touch persistence", () => {
 // ── touch() preserves identity ──
 
 describe("MemoryStore touch preserves identity", () => {
-  it("preserves id, content, importance, tags, and createdAt after touch (InMemoryStorage)", async () => {
-    const storage = new InMemoryStorage();
+  it("preserves id, content, importance, tags, and createdAt after touch (InMemoryStorageAdapter)", async () => {
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
     const mem = await store.store({
       actorId: "player1",
@@ -288,14 +288,14 @@ describe("MemoryStore touch preserves identity", () => {
   });
 
   it("preserves id after touch in DiskStorage", async () => {
-    const { DiskStorage } = await import("../src/adapters/storage/disk.js");
+    const { DiskStorageAdapter } = await import("../src/adapters/storage/disk.js");
     const { rm } = await import("node:fs/promises");
     const { join } = await import("node:path");
 
     const dir = join(import.meta.dirname ?? process.cwd(), ".memstack-touch-id-test");
     await rm(dir, { recursive: true, force: true });
 
-    const storage = new DiskStorage({ storageDir: dir });
+    const storage = new DiskStorageAdapter({ storageDir: dir });
     await storage.initialize();
     const store = new MemoryStore({ storage });
 
@@ -327,7 +327,7 @@ describe("MemoryStore touch preserves identity", () => {
 
 describe("Pruner (via MemoryStore)", () => {
   it("byAge: removes memories older than maxAge, keeps recent ones", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
 
     // Store 5 memories and backdate some of them
@@ -338,7 +338,7 @@ describe("Pruner (via MemoryStore)", () => {
     const old3 = await store.store({ actorId: "a", content: "old memory 3", importance: 0.5 });
     old3.createdAt = new Date(Date.now() - 36 * 3600000); // 36 hours ago
 
-    // 2 recent memories — createdAt is ~now (set by InMemoryStorage)
+    // 2 recent memories — createdAt is ~now (set by InMemoryStorageAdapter)
     const recent1 = await store.store({ actorId: "a", content: "recent memory 1", importance: 0.5 });
     const recent2 = await store.store({ actorId: "a", content: "recent memory 2", importance: 0.5 });
 
@@ -355,7 +355,7 @@ describe("Pruner (via MemoryStore)", () => {
   });
 
   it("byImportance: removes memories below minImportance threshold", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
 
     await store.store({ actorId: "a", content: "low #1", importance: 0.1 });
@@ -376,7 +376,7 @@ describe("Pruner (via MemoryStore)", () => {
   });
 
   it("byImportance: defaults to minImportance 0.5 when not specified", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
 
     await store.store({ actorId: "a", content: "low", importance: 0.2 });
@@ -391,7 +391,7 @@ describe("Pruner (via MemoryStore)", () => {
   });
 
   it("byCount: caps per-actor memory count, keeping highest importance", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
 
     // 10 memories for actor "a" with varying importance
@@ -424,7 +424,7 @@ describe("Pruner (via MemoryStore)", () => {
   });
 
   it("byType: removes only the specified memory types", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
 
     await store.store({ actorId: "a", content: "interaction 1", memoryType: "interaction" });
@@ -445,7 +445,7 @@ describe("Pruner (via MemoryStore)", () => {
   });
 
   it("byType: keeps all when memoryTypes is empty array", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
 
     await store.store({ actorId: "a", content: "interaction", memoryType: "interaction" });
@@ -461,7 +461,7 @@ describe("Pruner (via MemoryStore)", () => {
   });
 
   it("custom: removes memories matching the shouldRemove predicate", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
 
     const keep1 = await store.store({ actorId: "a", content: "important data", importance: 0.9 });
@@ -487,7 +487,7 @@ describe("Pruner (via MemoryStore)", () => {
   });
 
   it("custom: keeps all when predicate returns false for everything", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
 
     await store.store({ actorId: "a", content: "record 1" });
@@ -506,7 +506,7 @@ describe("Pruner (via MemoryStore)", () => {
   });
 
   it("empty prune: returns empty result when no memories in store", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
 
     const result = await store.prune({ type: "byAge", maxAge: 86400000 });
@@ -516,7 +516,7 @@ describe("Pruner (via MemoryStore)", () => {
   });
 
   it("dryRunPrune: reports what would be removed without deleting", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
 
     await store.store({ actorId: "a", content: "low", importance: 0.1 });
@@ -538,7 +538,7 @@ describe("Pruner (via MemoryStore)", () => {
 
 describe("Summarizer edge cases", () => {
   it("throws VALIDATION_ERROR when no memories to summarize", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage, llm: mockLLM as never });
 
     await expect(
@@ -547,7 +547,7 @@ describe("Summarizer edge cases", () => {
   });
 
   it("throws VALIDATION_ERROR when no LLM configured", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
 
     await store.store({ actorId: "a", content: "some memory" });
@@ -562,7 +562,7 @@ describe("Summarizer edge cases", () => {
 
 describe("MemoryStore edge cases", () => {
   it("storeBatch with empty array returns empty array", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
 
     const results = await store.storeBatch([]);
@@ -576,7 +576,7 @@ describe("MemoryStore edge cases", () => {
 
 describe("ContextCompiler edge cases", () => {
   it("compileContext with zero memories returns empty prompt and empty arrays", async () => {
-    const storage = new InMemoryStorage();
+    const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });
 
     const ctx = await store.compileContext({ actorId: "empty" });
@@ -585,5 +585,98 @@ describe("ContextCompiler edge cases", () => {
     expect(ctx.recentMemories).toEqual([]);
     expect(ctx.importantMemories).toEqual([]);
     expect(ctx.tokenEstimate).toBeGreaterThanOrEqual(0);
+  });
+});
+
+// ── Time range filter ──
+
+describe("time range filter", () => {
+  it("createdAfter filters older memories", async () => {
+    const storage = new InMemoryStorageAdapter();
+    const store = new MemoryStore({ storage });
+    const old = await store.store({ actorId: "a", content: "old" });
+    old.createdAt = new Date(Date.now() - 5000);
+    await store.store({ actorId: "a", content: "new" });
+    const cutoff = new Date(Date.now() - 2000);
+    const results = await store.retrieve({ actorId: "a", createdAfter: cutoff });
+    expect(results).toHaveLength(1);
+    expect(results[0].content).toBe("new");
+  });
+
+  it("createdBefore filters newer memories", async () => {
+    const storage = new InMemoryStorageAdapter();
+    const store = new MemoryStore({ storage });
+    await store.store({ actorId: "a", content: "before" });
+    const newMem = await store.store({ actorId: "a", content: "after" });
+    newMem.createdAt = new Date(Date.now() + 5000);
+    const cutoff = new Date(Date.now() + 1000);
+    const results = await store.retrieve({ actorId: "a", createdBefore: cutoff });
+    expect(results).toHaveLength(1);
+    expect(results[0].content).toBe("before");
+  });
+
+  it("both createdAfter and createdBefore together", async () => {
+    const storage = new InMemoryStorageAdapter();
+    const store = new MemoryStore({ storage });
+    const old = await store.store({ actorId: "a", content: "too-old" });
+    old.createdAt = new Date(Date.now() - 5000);
+    await store.store({ actorId: "a", content: "in-range" });
+    const tooNew = await store.store({ actorId: "a", content: "too-new" });
+    tooNew.createdAt = new Date(Date.now() + 5000);
+    const results = await store.retrieve({
+      actorId: "a",
+      createdAfter: new Date(Date.now() - 2000),
+      createdBefore: new Date(Date.now() + 2000),
+    });
+    expect(results).toHaveLength(1);
+    expect(results[0].content).toBe("in-range");
+  });
+});
+
+// ── Compose prune ──
+
+describe("compose prune strategy", () => {
+  it("keeps memories passing ALL sub-strategies", async () => {
+    const storage = new InMemoryStorageAdapter();
+    const store = new MemoryStore({ storage });
+    const mem1 = await store.store({ actorId: "a", content: "old and low", importance: 0.2 });
+    mem1.createdAt = new Date(Date.now() - 3 * 86400000);
+    const mem2 = await store.store({ actorId: "a", content: "old and high", importance: 0.9 });
+    mem2.createdAt = new Date(Date.now() - 3 * 86400000);
+    await store.store({ actorId: "a", content: "new and high", importance: 0.9 });
+
+    const result = await store.prune({
+      type: "compose",
+      strategies: [
+        { type: "byAge", maxAge: 86400000 },
+        { type: "byImportance", minImportance: 0.5 },
+      ],
+    });
+    expect(result.count).toBe(2);
+  });
+});
+
+// ── Summarize stream ──
+
+describe("summarizeStream", () => {
+  it("falls back to non-streaming when LLM lacks completeStream", async () => {
+    const storage = new InMemoryStorageAdapter();
+    const store = new MemoryStore({ storage, llm: mockLLM as never });
+    await store.store({ actorId: "a", content: "memory one" });
+    await store.store({ actorId: "a", content: "memory two" });
+    const chunks: { chunk: string; text: string }[] = [];
+    for await (const chunk of store.summarizeStream({ actorId: "a" })) {
+      chunks.push(chunk);
+    }
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks[chunks.length - 1].text).toBeTruthy();
+  });
+
+  it("throws when no memories to summarize", async () => {
+    const storage = new InMemoryStorageAdapter();
+    const store = new MemoryStore({ storage, llm: mockLLM as never });
+    await expect(async () => {
+      for await (const _ of store.summarizeStream({ actorId: "nonexistent" })) { /* */ }
+    }).rejects.toThrow("No memories to summarize");
   });
 });
