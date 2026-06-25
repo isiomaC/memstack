@@ -55,8 +55,9 @@ export { MongoDBStorageAdapter } from "./adapters/storage/mongodb.js";
 export type { MongoDBStorageConfig } from "./adapters/storage/mongodb.js";
 
 // Storage Adapters — Experimental (mock-tested, e2e blocked by platform constraints)
-// export { SQLiteStorageAdapter } from "./adapters/storage/sqlite.js";
-// export type { SQLiteStorageConfig } from "./adapters/storage/sqlite.js";
+export { SQLiteStorageAdapter } from "./adapters/storage/sqlite.js";
+export type { SQLiteStorageConfig } from "./adapters/storage/sqlite.js";
+// Storage Adapters — Experimental (mock-tested, e2e blocked by cloud deps or platform constraints)
 // export { ChromaStorageAdapter } from "./adapters/storage/chroma.js";
 // export type { ChromaStorageConfig } from "./adapters/storage/chroma.js";
 // export { PineconeStorageAdapter } from "./adapters/storage/pinecone.js";
