@@ -34,8 +34,6 @@ export interface MemoryStoreConfig {
   };
 }
 
-const EMBEDDING_BATCH_SIZE = 2048;
-
 export class MemoryStore {
   private storage: StorageProvider;
   private embedding?: EmbeddingProvider;
@@ -133,8 +131,9 @@ export class MemoryStore {
     let stored: Memory[];
     if (this.embedding && this.embedOnStore) {
       const enrichedResults: Memory[] = [];
-      for (let i = 0; i < normalInputs.length; i += EMBEDDING_BATCH_SIZE) {
-        const batch = normalInputs.slice(i, i + EMBEDDING_BATCH_SIZE);
+      const batchSize = this.embedding.maxBatchSize ?? 2048;
+      for (let i = 0; i < normalInputs.length; i += batchSize) {
+        const batch = normalInputs.slice(i, i + batchSize);
         const texts = batch.map((inp) => inp.content);
         const embeddings = await this.embedding!.embed(texts);
         const enriched = batch.map((input, j) => ({ ...input, embedding: embeddings[j] }));

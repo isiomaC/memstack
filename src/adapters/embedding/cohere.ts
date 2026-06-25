@@ -24,6 +24,7 @@ export class CohereEmbeddingAdapter implements EmbeddingProvider {
   private baseURL: string;
   private model: string;
   readonly dimensions: number;
+  readonly maxBatchSize = 96;
 
   constructor(config: CohereEmbeddingConfig) {
     this.apiKey = config.apiKey;

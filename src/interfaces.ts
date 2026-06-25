@@ -117,7 +117,10 @@ export interface LLMProvider {
 
 export interface EmbeddingProvider {
   embed(texts: string[]): Promise<number[][]>;
+  /** Vector dimension length (e.g., 1536 for text-embedding-3-small). */
   dimensions: number;
+  /** Maximum number of texts per embed() call. Default: 2048. */
+  maxBatchSize?: number;
 }
 
 export interface StorageProvider {

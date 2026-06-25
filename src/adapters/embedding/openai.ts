@@ -12,6 +12,7 @@ export class OpenAIEmbeddingAdapter implements EmbeddingProvider {
   private baseURL: string;
   private model: string;
   readonly dimensions: number;
+  readonly maxBatchSize = 2048;
 
   constructor(config: OpenAIEmbeddingConfig) {
     this.apiKey = config.apiKey;

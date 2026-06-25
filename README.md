@@ -82,6 +82,12 @@ Think of it as the open-source alternative to [Mem0](https://mem0.ai/) — plugg
 
 ## Quick Start
 
+```bash
+npm install @memstack/core
+```
+
+### OpenAI
+
 ```typescript
 import { MemStack, OpenAILLMAdapter, OpenAIEmbeddingAdapter, InMemoryStorageAdapter } from "@memstack/core";
 
@@ -92,7 +98,58 @@ const memstack = new MemStack({
   embedding: new OpenAIEmbeddingAdapter({ apiKey: process.env.OPENAI_API_KEY! }),
   storage: new InMemoryStorageAdapter(),
 });
+```
 
+### DeepSeek (no embeddings)
+
+DeepSeek provides chat completions but has no embedding API. Use the OpenAI-compatible LLM adapter with `baseURL` and omit the embedding adapter — retrieval falls back to keyword + recency + importance ranking. You still get the full pipeline: store, summarize, prune, and compileContext.
+
+```typescript
+import { MemStack, OpenAILLMAdapter, InMemoryStorageAdapter } from "@memstack/core";
+
+const llm = new OpenAILLMAdapter({
+  apiKey: process.env.DEEPSEEK_API_KEY!,
+  baseURL: "https://api.deepseek.com/v1",
+  defaultModel: "deepseek-chat",
+});
+
+const memstack = new MemStack({
+  llm,
+  storage: new InMemoryStorageAdapter(),
+  // No embedding adapter — retrieval uses keyword matching
+});
+```
+
+### OpenRouter / Together AI / any OpenAI-compatible API
+
+Same pattern — change `baseURL` and `defaultModel`:
+
+```typescript
+// OpenRouter
+const llm = new OpenAILLMAdapter({
+  apiKey: process.env.OPENROUTER_API_KEY!,
+  baseURL: "https://openrouter.ai/api/v1",
+  defaultModel: "openai/gpt-4o-mini",
+});
+
+// Together AI
+const llm = new OpenAILLMAdapter({
+  apiKey: process.env.TOGETHER_API_KEY!,
+  baseURL: "https://api.together.xyz/v1",
+  defaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+});
+
+// Gemini (OpenAI-compatible endpoint)
+const llm = new OpenAILLMAdapter({
+  apiKey: process.env.GEMINI_API_KEY!,
+  baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+  defaultModel: "gemini-2.0-flash",
+});
+```
+
+### Store and retrieve
+
+```typescript
 // 1. Store what happened
 await memstack.memory.store({
   actorId: "support-bot-42",
@@ -108,18 +165,21 @@ const memories = await memstack.memory.retrieve({
   strategy: "hybrid",
 });
 
-// 3. Inject into your LLM call
+// 3. Assemble an LLM-ready context
 const ctx = await memstack.memory.compileContext({
   actorId: "support-bot-42",
   maxTokens: 2000,
 });
 
-const llmResponse = await llm.complete({
+const response = await llm.complete({
   system: `You are a support bot. Here is what you remember:\n${ctx.systemPrompt}`,
   user: "The user is back and still can't log in. What do you do?",
 });
 
-// 4. Every 100 interactions, summarization kicks in automatically.
+console.log(response.text);
+// "Based on our history, the user has been experiencing 503 errors on Chrome 125..."
+
+// 4. Every 100 interactions, summarization triggers automatically.
 // Old interactions are compressed into a paragraph. Token costs stay flat.
 ```
 
@@ -194,7 +254,7 @@ No embedding adapter? `semantic` and `hybrid` fall back to keyword matching + im
 
 ### 3. Compile Context
 
-The killer feature. `compileContext()` takes the retrieval results and assembles an LLM-ready system prompt — deduplicated, sorted by recency and importance, with a token estimate so you know the cost before calling the LLM.
+`compileContext()` takes retrieval results and assembles an LLM-ready system prompt — deduplicated, sorted by recency and importance, with a token estimate so you know the cost before calling the LLM.
 
 ```typescript
 const ctx = await ms.memory.compileContext({
@@ -215,13 +275,16 @@ const ctx = await ms.memory.compileContext({
 console.log(ctx.tokenEstimate);  // ~280
 
 // Inject into your LLM call
+const currentMessage = "The user is asking about their refund status.";
 const response = await llm.complete({
   system: ctx.systemPrompt,
-  user: userMessage,
+  user: currentMessage,
 });
+
+console.log(response.text);
 ```
 
-`compileContext()` is the difference between "we have a vector DB" and "we have agent memory." It handles deduplication, token budgeting, and the recent-vs-important split that makes context useful.
+`compileContext()` handles deduplication, token budgeting, and splits context into important-vs-recent sections. Without it, you'd be concatenating raw retrieval results and risking context-window overflow.
 
 ### 4. Summarize
 
@@ -311,13 +374,29 @@ const ms = new MemStack({
 ### Support Agent
 
 ```typescript
+// detectUrgency and classifyIntent are your own business logic.
+// They could be simple keyword matchers, regex, or an LLM call.
+function detectUrgency(msg: string): number {
+  if (msg.match(/urgent|asap|immediately/i)) return 0.9;
+  if (msg.match(/error|fail|broken/i)) return 0.7;
+  return 0.5;
+}
+
+function classifyIntent(msg: string): string[] {
+  const tags: string[] = [];
+  if (msg.match(/bill|refund|charge|payment/i)) tags.push("billing");
+  if (msg.match(/error|bug|fail|crash/i)) tags.push("bug");
+  if (msg.match(/login|password|account/i)) tags.push("account");
+  return tags;
+}
+
 // Every customer message becomes a memory
 async function handleMessage(customerId: string, message: string) {
   await ms.memory.store({
     actorId: `customer:${customerId}`,
     content: message,
-    importance: detectUrgency(message), // NLP heuristic or LLM call
-    tags: classifyIntent(message),      // "billing", "bug", "account", etc.
+    importance: detectUrgency(message),
+    tags: classifyIntent(message),
   });
 
   // Retrieve everything relevant to this customer's history
@@ -341,6 +420,12 @@ async function handleMessage(customerId: string, message: string) {
 ### RAG Pipeline
 
 ```typescript
+// Suppose you have documents from your knowledge base
+const documents = [
+  { text: "Authentication uses JWT tokens with 15-minute expiry.", url: "/docs/auth", section: "security" },
+  { text: "Refunds are processed within 5-10 business days.", url: "/docs/billing", section: "billing" },
+];
+
 // Index documents as observation memories
 for (const doc of documents) {
   await ms.memory.store({
@@ -443,9 +528,61 @@ await ms.memory.retrieve({ actorId: "x", query: "login bug", strategy: "hybrid" 
 
 Embeddings power semantic search. They're optional — without them, retrieval uses keyword matching.
 
-**With embeddings** (configure an `EmbeddingProvider`): each `store()` computes a vector. `retrieve()` with `"semantic"` or `"hybrid"` uses cosine similarity ranking.
+### With embeddings vs Without embeddings
 
-**Without embeddings**: everything still works — retrieval falls back to importance + recency + keyword filters. No API costs, no setup.
+**With embeddings** (`embedding` adapter configured):
+
+```typescript
+import { MemStack, OpenAILLMAdapter, OpenAIEmbeddingAdapter, InMemoryStorageAdapter } from "@memstack/core";
+
+const ms = new MemStack({
+  llm: new OpenAILLMAdapter({ apiKey: process.env.OPENAI_API_KEY! }),
+  embedding: new OpenAIEmbeddingAdapter({ apiKey: process.env.OPENAI_API_KEY! }),
+  storage: new InMemoryStorageAdapter(),
+});
+
+// store() computes a 1536-dim vector automatically
+await ms.memory.store({
+  actorId: "agent-7",
+  content: "Customer asked about refund policy for Q2 purchases.",
+});
+
+// retrieve() with "semantic" or "hybrid" uses cosine similarity
+// Query: "refund" finds the refund policy memory even though the word "refund"
+// appears differently across stored memories.
+const results = await ms.memory.retrieve({
+  actorId: "agent-7",
+  query: "how do I get my money back",
+  strategy: "semantic",
+});
+// Matches "Customer asked about refund policy" — semantic match, not keyword match.
+```
+
+**Without embeddings** (no `embedding` adapter):
+
+```typescript
+const ms = new MemStack({
+  llm: new OpenAILLMAdapter({ apiKey: process.env.OPENAI_API_KEY! }),
+  storage: new InMemoryStorageAdapter(),
+  // no embedding adapter
+});
+
+// store() works identically, just no vector computed
+await ms.memory.store({
+  actorId: "agent-7",
+  content: "Customer asked about refund policy for Q2 purchases.",
+});
+
+// retrieve() with "semantic" or "hybrid" falls back to keyword matching
+// plus importance/recency sorting. No API costs, no setup required.
+const results = await ms.memory.retrieve({
+  actorId: "agent-7",
+  query: "refund",
+  strategy: "hybrid", // falls back to keyword + importance
+});
+// Still works — finds "refund" via substring match. Less precise for
+// paraphrased queries ("money back" won't match "refund").
+```
 
 **Batch embedding:** `storeBatch()` sends all texts in one embedding API call, reducing cost and latency.
 
@@ -457,6 +594,28 @@ const ms = new MemStack({
   defaults: { embedOnStore: false },
 });
 ```
+
+### Vector dimensions and model compatibility
+
+Different embedding models produce vectors of different lengths. Cosine similarity only works between vectors of the same dimension. If you change embedding models, existing vectors become incompatible — they can't be compared to new ones.
+
+| Adapter | Default model | Dimensions |
+|---------|--------------|------------|
+| `OpenAIEmbeddingAdapter` | `text-embedding-3-small` | 1536 |
+| `OpenAIEmbeddingAdapter` | `text-embedding-3-large` | 3072 |
+| `CohereEmbeddingAdapter` | `embed-english-v3.0` | 1024 |
+| `CohereEmbeddingAdapter` | `embed-english-light-v3.0` | 384 |
+| `CohereEmbeddingAdapter` | `embed-english-v2.0` | 4096 |
+| `CohereEmbeddingAdapter` | `embed-multilingual-v3.0` | 1024 |
+
+**What happens if dimensions don't match:** If you store memories with one model (e.g., 1536 dims) then switch to another model (e.g., 1024 dims), the storage adapter receives query vectors and stored vectors of different lengths. Cosine similarity between vectors of different dimensions is undefined — results depend on the storage backend's behavior. Most will either error, return empty results, or produce meaningless scores.
+
+**Recommendation:** Pick one embedding model per storage instance and stick with it. If you need to switch models, create a new storage instance and re-embed from scratch.
+
+**DeepSeek users:** DeepSeek has no embeddings API. If you use DeepSeek as your LLM, you must either:
+1. Omit the embedding adapter and use `"recent"` or `"important"` retrieval strategies (no API costs, less precise)
+2. Pair DeepSeek with a separate embedding provider (e.g., OpenAI for embeddings, DeepSeek for chat)
+
 
 ---
 
@@ -688,6 +847,8 @@ ms.memory.summarizeStream(options: SummarizeOptions): AsyncIterable<{ chunk: str
 Snapshot and restore full state for persistence, backups, or migration:
 
 ```typescript
+import * as fs from "node:fs";
+
 // Save
 const snapshot = await ms.export();
 fs.writeFileSync("state.json", JSON.stringify(snapshot, null, 2));
