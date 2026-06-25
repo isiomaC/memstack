@@ -1,7 +1,7 @@
 {
   "name": "@memstack/cli",
   "version": "0.1.0",
-  "description": "CLI for MemStack — shell-based agent memory",
+  "description": "CLI for MemStack \u2014 shell-based agent memory",
   "type": "module",
   "main": "dist/cli.js",
   "bin": {
@@ -14,16 +14,25 @@
     }
   },
   "types": "dist/cli.d.ts",
-  "files": ["dist"],
-  "engines": { "node": ">=18.0.0" },
-  "repository": { "type": "git", "url": "https://github.com/memstack/memstack" },
-  "bugs": { "url": "https://github.com/memstack/memstack/issues" },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/memstack/memstack"
+  },
+  "bugs": {
+    "url": "https://github.com/memstack/memstack/issues"
+  },
   "homepage": "https://github.com/memstack/memstack",
-  "prepublishOnly": "pnpm build && pnpm check && pnpm test",
   "scripts": {
     "build": "tsup src/cli.ts --format esm --clean",
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build && pnpm check && pnpm test"
   },
   "dependencies": {
     "@memstack/core": "workspace:*"
@@ -34,6 +43,12 @@
     "vitest": "^1.0.0",
     "@types/node": "^22.0.0"
   },
-  "keywords": ["cli", "memory", "ai", "agent", "shell"],
+  "keywords": [
+    "cli",
+    "memory",
+    "ai",
+    "agent",
+    "shell"
+  ],
   "license": "MIT"
 }

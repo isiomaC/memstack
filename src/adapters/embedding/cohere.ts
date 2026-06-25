@@ -35,8 +35,8 @@ export class CohereEmbeddingAdapter implements EmbeddingProvider {
 
   async embed(texts: string[]): Promise<number[][]> {
     if (texts.length === 0) return [];
-    if (texts.length > 96) {
-      throw new MemStackError("VALIDATION_ERROR", `Cohere max 96 texts per batch, got ${texts.length}`);
+    if (texts.length > this.maxBatchSize) {
+      throw new MemStackError("VALIDATION_ERROR", `Cohere max ${this.maxBatchSize} texts per batch, got ${texts.length}`);
     }
 
     try {

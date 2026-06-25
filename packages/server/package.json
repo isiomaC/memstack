@@ -1,7 +1,7 @@
 {
   "name": "@memstack/server",
   "version": "0.1.0",
-  "description": "REST API server for MemStack — self-hostable agent memory",
+  "description": "REST API server for MemStack \u2014 self-hostable agent memory",
   "type": "module",
   "main": "dist/index.js",
   "exports": {
@@ -11,17 +11,26 @@
     }
   },
   "types": "dist/index.d.ts",
-  "files": ["dist"],
-  "engines": { "node": ">=18.0.0" },
-  "repository": { "type": "git", "url": "https://github.com/memstack/memstack" },
-  "bugs": { "url": "https://github.com/memstack/memstack/issues" },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/memstack/memstack"
+  },
+  "bugs": {
+    "url": "https://github.com/memstack/memstack/issues"
+  },
   "homepage": "https://github.com/memstack/memstack",
-  "prepublishOnly": "pnpm build && pnpm check && pnpm test",
   "scripts": {
     "build": "tsup src/index.ts --format esm --clean",
     "dev": "tsup src/index.ts --format esm --watch",
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build && pnpm check && pnpm test"
   },
   "dependencies": {
     "@memstack/core": "workspace:*",
@@ -33,6 +42,12 @@
     "vitest": "^1.0.0",
     "@types/node": "^22.0.0"
   },
-  "keywords": ["api", "memory", "ai", "agent", "rest"],
+  "keywords": [
+    "api",
+    "memory",
+    "ai",
+    "agent",
+    "rest"
+  ],
   "license": "MIT"
 }

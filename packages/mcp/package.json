@@ -1,7 +1,7 @@
 {
   "name": "@memstack/mcp",
   "version": "0.1.0",
-  "description": "MCP server for MemStack — AI agent memory via Model Context Protocol",
+  "description": "MCP server for MemStack \u2014 AI agent memory via Model Context Protocol",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -14,17 +14,26 @@
     }
   },
   "types": "dist/index.d.ts",
-  "files": ["dist"],
-  "engines": { "node": ">=18.0.0" },
-  "repository": { "type": "git", "url": "https://github.com/memstack/memstack" },
-  "bugs": { "url": "https://github.com/memstack/memstack/issues" },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/memstack/memstack"
+  },
+  "bugs": {
+    "url": "https://github.com/memstack/memstack/issues"
+  },
   "homepage": "https://github.com/memstack/memstack",
-  "prepublishOnly": "pnpm build && pnpm check && pnpm test",
   "scripts": {
     "build": "tsup src/index.ts src/cli.ts --format esm --dts --clean",
     "dev": "tsup src/index.ts src/cli.ts --format esm --dts --watch",
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build && pnpm check && pnpm test"
   },
   "dependencies": {
     "@memstack/core": "workspace:*",
@@ -35,6 +44,12 @@
     "typescript": "^5.7.0",
     "vitest": "^1.0.0"
   },
-  "keywords": ["mcp", "memory", "ai", "agent", "llm"],
+  "keywords": [
+    "mcp",
+    "memory",
+    "ai",
+    "agent",
+    "llm"
+  ],
   "license": "MIT"
 }

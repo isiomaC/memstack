@@ -23,8 +23,8 @@ export class OpenAIEmbeddingAdapter implements EmbeddingProvider {
 
   async embed(texts: string[]): Promise<number[][]> {
     if (texts.length === 0) return [];
-    if (texts.length > 2048) {
-      throw new MemStackError("VALIDATION_ERROR", `Max 2048 texts per batch, got ${texts.length}`);
+    if (texts.length > this.maxBatchSize) {
+      throw new MemStackError("VALIDATION_ERROR", `Max ${this.maxBatchSize} texts per batch, got ${texts.length}`);
     }
 
     try {
