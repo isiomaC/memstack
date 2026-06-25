@@ -22,12 +22,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/memstack/memstack"
+    "url": "https://github.com/isiomaC/memstack"
   },
   "bugs": {
-    "url": "https://github.com/memstack/memstack/issues"
+    "url": "https://github.com/isiomaC/memstack/issues"
   },
-  "homepage": "https://github.com/memstack/memstack",
+  "homepage": "https://github.com/isiomaC/memstack",
   "scripts": {
     "build": "tsup src/cli.ts --format esm --clean",
     "check": "tsc --noEmit",
