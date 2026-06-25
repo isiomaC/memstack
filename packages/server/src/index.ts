@@ -152,6 +152,61 @@ app.post("/v1/memories/merge", async (c) => {
   }
 });
 
+app.post("/v1/memories/process", async (c) => {
+  try {
+    const body = await c.req.json();
+    const result = await (await getMs()).process(body);
+    return c.json(result, 201);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+  }
+});
+
+app.get("/v1/memories/count", async (c) => {
+  try {
+    const actorId = c.req.query("actorId");
+    const memoryType = c.req.query("memoryType");
+    const minImportance = c.req.query("minImportance");
+    const count = await (await getMs()).memory.count({
+      actorId,
+      memoryType: memoryType as string | undefined,
+      minImportance: minImportance ? parseFloat(minImportance) : undefined,
+    });
+    return c.json({ count });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+  }
+});
+
+app.post("/v1/memories/:id/touch", async (c) => {
+  try {
+    await (await getMs()).memory.touch(c.req.param("id"));
+    return c.json({ touched: true });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+  }
+});
+
+app.get("/v1/memories/export", async (c) => {
+  try {
+    const actorId = c.req.query("actorId");
+    const snapshot = await (await getMs()).export(actorId);
+    return c.json(snapshot);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+  }
+});
+
+app.post("/v1/memories/import", async (c) => {
+  try {
+    const body = await c.req.json();
+    await (await getMs()).import(body);
+    return c.json({ imported: body.memories?.length ?? 0 }, 201);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+  }
+});
+
 app.post("/v1/summarize", async (c) => {
   try {
     const body = await c.req.json();
