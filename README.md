@@ -85,8 +85,10 @@ Think of it as the open-source alternative to [Mem0](https://mem0.ai/) — plugg
 ```typescript
 import { MemStack, OpenAILLMAdapter, OpenAIEmbeddingAdapter, InMemoryStorageAdapter } from "@memstack/core";
 
+const llm = new OpenAILLMAdapter({ apiKey: process.env.OPENAI_API_KEY! });
+
 const memstack = new MemStack({
-  llm: new OpenAILLMAdapter({ apiKey: process.env.OPENAI_API_KEY! }),
+  llm,
   embedding: new OpenAIEmbeddingAdapter({ apiKey: process.env.OPENAI_API_KEY! }),
   storage: new InMemoryStorageAdapter(),
 });
@@ -674,7 +676,11 @@ ms.memory.dryRunPrune(strategy: PruneStrategy): Promise<{ wouldPrune: string[]; 
 ms.memory.count(filter?: MemoryCountFilter): Promise<number>
 ms.memory.delete(id: string): Promise<void>
 ms.memory.deleteMany(ids: string[]): Promise<number>
-ms.memory.touch(id: string): Promise<void>  // bump recency without changing content
+ms.memory.touch(id: string): Promise<void>
+ms.memory.purgeActor(actorId: string): Promise<number>
+ms.memory.merge(ids: string[]): Promise<Memory>
+ms.memory.stats(actorId?: string): Promise<MemoryStats>
+ms.memory.summarizeStream(options: SummarizeOptions): AsyncIterable<{ chunk: string; text: string }>
 ```
 
 ### Export / Import
@@ -783,6 +789,7 @@ cd memstack
 pnpm install
 
 pnpm test           # 393 tests, no external services needed
+pnpm test:e2e        # 82 E2E tests (requires Docker)
 pnpm test:watch     # Watch mode
 pnpm build          # CJS + ESM + type declarations
 pnpm check          # TypeScript type-check only
@@ -837,7 +844,7 @@ npm login
 npm publish --access public
 ```
 
-The `@memstack` scope requires `--access public` on first publish.
+The `@memstack` scope requires `--access public`.
 
 ---
 
@@ -845,7 +852,6 @@ The `@memstack` scope requires `--access public` on first publish.
 
 Most needed contributions:
 
-- **Docker Compose** for integration testing
 - **LLM adapters**: Google Gemini (native), Amazon Bedrock, Vertex AI
 - **Embedding adapters**: local inference (transformers.js, ONNX)
 - **Benchmarks**: retrieval quality, latency, cost comparisons
