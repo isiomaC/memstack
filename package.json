@@ -21,7 +21,7 @@
     "test:e2e": "npx vitest run --config vitest.e2e.config.ts",
     "test:e2e:run": "bash e2e/run-all.sh",
     "check": "tsc --noEmit",
-    "prepublishOnly": "pnpm build && pnpm check && pnpm test",
+    "prepublishOnly": "npx tsup src/index.ts --format cjs,esm --dts --clean && npx tsc --noEmit && npx vitest run",
     "publish:all": "pnpm publish -r --access public"
   },
   "keywords": [
