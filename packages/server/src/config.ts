@@ -93,5 +93,7 @@ export async function loadConfig(): Promise<MemStackConfig> {
   const embedding = buildEmbeddingAdapter();
   const storage = await buildStorageAdapter();
 
-  return { llm, embedding, storage };
+  const embedOnStore = process.env.MEMSTACK_EMBED_ON_STORE !== "false";
+
+  return { llm, embedding, storage, embedOnStore };
 }
