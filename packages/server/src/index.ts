@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { MemStack } from "@memstack/core";
+import type { MemoryType } from "@memstack/core";
 import { loadConfig } from "./config.js";
 
 const app = new Hono();
@@ -106,7 +107,7 @@ app.get("/v1/memories/count", async (c) => {
     const minImportance = c.req.query("minImportance");
     const count = await (await getMs()).memory.count({
       actorId,
-      memoryType: memoryType as string | undefined,
+      memoryType: memoryType as MemoryType | undefined,
       minImportance: minImportance ? parseFloat(minImportance) : undefined,
     });
     return c.json({ count });

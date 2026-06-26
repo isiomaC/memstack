@@ -32,7 +32,7 @@
     "build": "tsup src/cli.ts --format esm --clean",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "prepublishOnly": "pnpm build && pnpm check && pnpm test"
+    "prepublishOnly": "npx tsc --noEmit && npx vitest run"
   },
   "dependencies": {
     "@memstack/core": "workspace:*"

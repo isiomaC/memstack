@@ -30,7 +30,7 @@
     "dev": "tsup src/index.ts --format esm --watch",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "prepublishOnly": "pnpm build && pnpm check && pnpm test"
+    "prepublishOnly": "npx tsc --noEmit && npx vitest run"
   },
   "dependencies": {
     "@memstack/core": "workspace:*",
