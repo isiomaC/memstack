@@ -252,13 +252,53 @@ app.get("/v1/stats/:actorId", async (c) => {
   }
 });
 
+app.get("/v1/summarize/stream", async (c) => {
+  const actorId = c.req.query("actorId") ?? "default";
+  const olderThan = c.req.query("olderThan");
+  const skipMostRecent = c.req.query("skipMostRecent");
+  const targetCount = c.req.query("targetCount");
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const ms = await getMs();
+        const gen = ms.memory.summarizeStream({
+          actorId,
+          olderThan: olderThan ? new Date(olderThan) : undefined,
+          skipMostRecent: skipMostRecent ? parseInt(skipMostRecent, 10) : undefined,
+          targetCount: targetCount ? parseInt(targetCount, 10) : undefined,
+        });
+
+        for await (const { chunk, text } of gen) {
+          const line = `data: ${JSON.stringify({ chunk, text })}\n\n`;
+          controller.enqueue(new TextEncoder().encode(line));
+        }
+        controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+        controller.close();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Internal error";
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ error: msg })}\n\n`));
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+});
+
 app.get("/health", async (c) => {
   try {
     const status = await (await getMs()).health();
     return c.json({
       status: status.storage ? "ok" : "degraded",
       storage: status.storage ? "connected" : "disconnected",
-      version: "0.4.0",
+      version: "0.5.0",
     });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
