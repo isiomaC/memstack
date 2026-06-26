@@ -23,6 +23,8 @@ All via environment variables. Same scheme as @memstack/mcp.
 | `REDIS_URL` | Redis connection | `redis://localhost:6379` |
 | `OPENAI_API_KEY` | OpenAI LLM + embeddings | — |
 | `ANTHROPIC_API_KEY` | Anthropic LLM (summarization) | — |
+| `MEMSTACK_OPENAI_BASE_URL` | Custom API endpoint (DeepSeek, etc.) | `https://api.openai.com/v1` |
+| `MEMSTACK_LLM_MODEL` | Model override | `gpt-4o-mini` |
 
 ## Commands
 

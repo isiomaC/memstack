@@ -78,8 +78,11 @@ SQLITE_PATH=./memory.db
 |---|---|
 | `OPENAI_API_KEY` | OpenAI LLM (default) |
 | `ANTHROPIC_API_KEY` | Anthropic (summarization) |
+| `MEMSTACK_OPENAI_BASE_URL` | Custom API endpoint (DeepSeek, etc.) |
+| `MEMSTACK_LLM_MODEL` | Model override |
+| `MEMSTACK_ACTOR` | Default actor ID |
 
-At least one of `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` must be set. If both are set, Anthropic is preferred for summarization.
+At least one of `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` must be set. Anthropic preferred if both are set.
 
 ### Embeddings (semantic search)
 

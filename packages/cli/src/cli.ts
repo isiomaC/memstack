@@ -170,7 +170,10 @@ async function main() {
       if (!values.actor) fail("--actor is required");
       if (!values.file) fail("--file is required");
       const raw = await readFile(String(values.file), "utf-8");
-      const snapshot = JSON.parse(raw);
+      let snapshot = JSON.parse(raw);
+      if (Array.isArray(snapshot)) {
+        snapshot = { version: 1 as const, memories: snapshot, exportedAt: new Date().toISOString() };
+      }
       await ms.import(snapshot);
       result = { imported: snapshot.memories?.length ?? 0 };
       break;

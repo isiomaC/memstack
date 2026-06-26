@@ -708,6 +708,8 @@ MemStack ships with **11 production-ready storage adapters (7 experimental)** �
 
 ### Experimental (mock-tested, blocked by cloud deps or platform constraints)
 
+Available via direct source import. Not yet in the barrel export — uncomment in `src/index.ts` when e2e verified.
+
 | Adapter | Backend | Blocker |
 |---|---|---|
 | `SQLiteStorageAdapter` | SQLite (better-sqlite3) | Native binary for Node 24 |
@@ -717,6 +719,8 @@ MemStack ships with **11 production-ready storage adapters (7 experimental)** �
 | `UpstashStorageAdapter` | Upstash Redis + Vector | Cloud-only (needs API key) |
 | `Mem0StorageAdapter` | Mem0 OSS or Cloud | Cloud-only (needs API key) |
 | `ZepStorageAdapter` | Zep Cloud or CE | Cloud-only (needs API key) |
+
+> **Direct import:** `import { ChromaStorageAdapter } from "@memstack/core/src/adapters/storage/chroma.js"`
 
 **Quick-start per backend:**
 
@@ -776,13 +780,8 @@ class MyStorage implements StorageProvider {
 | MongoDB | Atlas Vector Search | No | ✅ Production |
 | Neo4j | Neo4j vector index | No | ✅ Production |
 | Hybrid | Delegates to cache/durable | If durable supports | ✅ Production |
-| SQLite | Cosine in-memory | Yes | ⚠️ Experimental |
-| Turso | DiskANN native | Yes | ⚠️ Experimental |
-| Chroma | Native | No | ⚠️ Experimental |
-| Pinecone | ANN native | No | ⚠️ Experimental |
-| Upstash | Native vector (vector mode) | No | ⚠️ Experimental |
-| Mem0 | Delegates to Mem0 | No | ⚠️ Experimental |
-| Zep | Graphiti temporal graph | No | ⚠️ Experimental |
+| SQLite | Cosine in-memory | Yes | ✅ Production |
+| Hybrid | Delegates to cache/durable | If durable supports | ✅ Production |
 
 ---
 

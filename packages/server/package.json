@@ -1,6 +1,6 @@
 {
   "name": "@memstack/server",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "REST API server for MemStack \u2014 self-hostable agent memory",
   "type": "module",
   "main": "dist/index.js",
