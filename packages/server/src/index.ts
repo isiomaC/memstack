@@ -298,7 +298,7 @@ app.get("/health", async (c) => {
     return c.json({
       status: status.storage ? "ok" : "degraded",
       storage: status.storage ? "connected" : "disconnected",
-      version: "0.6.3",
+      version: "0.6.4",
     });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
