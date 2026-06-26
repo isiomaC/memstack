@@ -56,6 +56,7 @@ All via environment variables.
 | `GET` | `/v1/memories/count` | Count with filters |
 | `GET` | `/v1/memories/export` | Export snapshot |
 | `POST` | `/v1/summarize` | Compress old memories |
+| `GET` | `/v1/summarize/stream` | Stream summary via SSE |
 | `POST` | `/v1/prune` | Remove stale memories |
 | `POST` | `/v1/prune/dry-run` | Preview prune |
 | `GET` | `/v1/stats/:actorId` | Memory diagnostics |
@@ -81,6 +82,9 @@ curl -X POST http://localhost:3000/v1/memories/retrieve \
 curl -X POST http://localhost:3000/v1/memories/context \
   -H "Content-Type: application/json" \
   -d '{"actorId":"agent-1","maxTokens":500}'
+
+# Stream summarization (SSE)
+curl -N "http://localhost:3000/v1/summarize/stream?actorId=agent-1&olderThan=2026-01-01T00:00:00Z"
 ```
 
 ## Docker
