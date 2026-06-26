@@ -1,6 +1,6 @@
 {
   "name": "@memstack/core",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Open-source AI memory framework \u2014 store, retrieve, summarize, and prune memories for LLM agents and games",
   "type": "module",
   "main": "dist/index.js",
