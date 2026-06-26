@@ -18,8 +18,7 @@ describe("Server HTTP integration", () => {
 
   beforeAll(async () => {
     const { spawn } = await import("node:child_process");
-    const bunPath = process.env.BUN_PATH ?? "bun";
-    const child = spawn(bunPath, ["run", "src/index.ts"], {
+    const child = spawn("bun", ["run", "src/index.ts"], {
       cwd: new URL("..", import.meta.url).pathname,
       env: {
         ...process.env,

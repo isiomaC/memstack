@@ -54,6 +54,7 @@ jobs:
         with: { version: 10 }
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: 'pnpm' }
+      - uses: oven-sh/setup-bun@v2
       - run: pnpm install
       - run: cd packages/server && npx tsup src/index.ts --format esm --clean
       - run: cd packages/server && npx tsc --noEmit
