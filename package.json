@@ -16,8 +16,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --clean",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "npx vitest run test/",
+    "test:watch": "npx vitest test/",
     "test:e2e": "npx vitest run --config vitest.e2e.config.ts",
     "test:e2e:run": "bash e2e/run-all.sh",
     "check": "tsc --noEmit",
