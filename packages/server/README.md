@@ -33,6 +33,7 @@ All via environment variables.
 | `ANTHROPIC_API_KEY` | Anthropic LLM (summarization) | — |
 | `MEMSTACK_OPENAI_BASE_URL` | Custom API endpoint (DeepSeek, etc) | `https://api.openai.com/v1` |
 | `MEMSTACK_LLM_MODEL` | Model override | `gpt-4o-mini` |
+| `MEMSTACK_EMBED_ON_STORE` | Auto-embed on store | `true` |
 | `MEMSTACK_API_KEY` | Bearer token auth (optional) | — |
 | `MEMSTACK_RATE_LIMIT` | Requests/minute limit | 0 (disabled) |
 | `PORT` | HTTP port | 3000 |
