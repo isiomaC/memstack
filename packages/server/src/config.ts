@@ -95,5 +95,5 @@ export async function loadConfig(): Promise<MemStackConfig> {
 
   const embedOnStore = process.env.MEMSTACK_EMBED_ON_STORE !== "false";
 
-  return { llm, embedding, storage, embedOnStore };
+  return { llm, embedding, storage, defaults: { embedOnStore } };
 }
