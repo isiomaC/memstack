@@ -11,7 +11,7 @@
 
 Please **do not** open a public GitHub issue for security vulnerabilities.
 
-Email **nicholasadebayo112@gmail.com** with:
+Email **chuck.contactme@gmail.com** with:
 
 - A description of the vulnerability
 - Steps to reproduce
