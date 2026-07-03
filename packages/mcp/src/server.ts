@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
     CallToolRequestSchema,
@@ -8,7 +9,9 @@ import {
     GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { MemStack } from "@memstack/core";
-import type { MemStackConfig, PruneStrategy, MemoryType, ProcessInput, MemoryStoreInput, MemoryRetrieveQuery, ContextOptions, SummarizeOptions } from "@memstack/core";
+import type { MemStackConfig, PruneStrategy, MemoryType, Memory, MemStackSnapshot, ProcessInput, MemoryStoreInput, MemoryRetrieveQuery, ContextOptions, SummarizeOptions } from "@memstack/core";
+
+const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as { version: string };
 
 const TOOLS = [
     {
@@ -42,6 +45,44 @@ const TOOLS = [
                 metadata: { type: "object", description: "Additional metadata key-value pairs" },
             },
             required: ["content"],
+        },
+    },
+    {
+        name: "memory_store_batch",
+        description:
+            "Store multiple memories in one call, directly without enrichment. Embeddings (if configured) are computed in a single batched call for efficiency.",
+        inputSchema: {
+            type: "object" as const,
+            properties: {
+                memories: {
+                    type: "array",
+                    description: "Memories to store (at least 1).",
+                    items: {
+                        type: "object",
+                        properties: {
+                            content: { type: "string", description: "The memory content text" },
+                            actorId: { type: "string", description: "Actor ID. Defaults to the current session actor." },
+                            importance: { type: "number", description: "Importance score 0.0-1.0. Default: 0.5." },
+                            tags: { type: "array", items: { type: "string" }, description: "Tags for categorization" },
+                            memoryType: { type: "string", description: "Memory type (interaction, summary, observation, fact, reflection). Default: interaction." },
+                            metadata: { type: "object", description: "Additional metadata key-value pairs" },
+                        },
+                        required: ["content"],
+                    },
+                },
+            },
+            required: ["memories"],
+        },
+    },
+    {
+        name: "memory_get",
+        description: "Get a single memory by ID. Returns null if not found.",
+        inputSchema: {
+            type: "object" as const,
+            properties: {
+                id: { type: "string", description: "Memory ID" },
+            },
+            required: ["id"],
         },
     },
     {
@@ -153,6 +194,49 @@ const TOOLS = [
         },
     },
     {
+        name: "memory_delete_many",
+        description: "Delete multiple memories by ID in one call. Returns the number actually deleted.",
+        inputSchema: {
+            type: "object" as const,
+            properties: {
+                ids: { type: "array", items: { type: "string" }, description: "Memory IDs to delete" },
+            },
+            required: ["ids"],
+        },
+    },
+    {
+        name: "memory_touch",
+        description: "Bump a memory's recency (last-accessed timestamp) without changing its content, id, or createdAt.",
+        inputSchema: {
+            type: "object" as const,
+            properties: {
+                id: { type: "string", description: "Memory ID to touch" },
+            },
+            required: ["id"],
+        },
+    },
+    {
+        name: "memory_export",
+        description: "Export a snapshot of memories for backup or migration. Returns { version, memories, exportedAt }.",
+        inputSchema: {
+            type: "object" as const,
+            properties: {
+                actorId: { type: "string", description: "Actor ID to export. Defaults to the current session actor." },
+            },
+        },
+    },
+    {
+        name: "memory_import",
+        description: "Import memories from a snapshot previously produced by memory_export. Restores each memory as-is, including its original ID.",
+        inputSchema: {
+            type: "object" as const,
+            properties: {
+                memories: { type: "array", items: { type: "object" }, description: "Memories to import, as produced by memory_export" },
+            },
+            required: ["memories"],
+        },
+    },
+    {
         name: "memory_health",
         description: "Check the health of storage, LLM, and embedding connections.",
         inputSchema: {
@@ -198,6 +282,30 @@ interface MCPStoreArgs {
     tags?: string[];
     memoryType?: string;
     metadata?: Record<string, unknown>;
+}
+
+interface MCPStoreBatchArgs {
+    memories: MCPStoreArgs[];
+}
+
+interface MCPGetArgs {
+    id: string;
+}
+
+interface MCPDeleteManyArgs {
+    ids: string[];
+}
+
+interface MCPTouchArgs {
+    id: string;
+}
+
+interface MCPExportArgs {
+    actorId?: string;
+}
+
+interface MCPImportArgs {
+    memories: Memory[];
 }
 
 interface MCPRetrieveArgs {
@@ -254,10 +362,19 @@ function buildPruneStrategy(args: MCPPruneArgs): PruneStrategy {
     };
 }
 
-export function createServer({ config, defaultActorId }: { config: MemStackConfig; defaultActorId: string }): Server {
-    const ms = new MemStack(config);
+export function createServer({
+    config,
+    defaultActorId,
+    ms: providedMs,
+}: {
+    config: MemStackConfig;
+    defaultActorId: string;
+    /** Reuse an existing MemStack instance instead of constructing one from config. Used by HTTP mode to avoid reconnecting storage per request. */
+    ms?: MemStack;
+}): Server {
+    const ms = providedMs ?? new MemStack(config);
     const server = new Server(
-        { name: "memstack", version: "0.1.0" },
+        { name: "memstack", version: pkg.version },
         { capabilities: { tools: {}, resources: {}, prompts: {} } },
     );
 
@@ -297,6 +414,30 @@ export function createServer({ config, defaultActorId }: { config: MemStackConfi
                         metadata: a.metadata,
                     };
                     const result = await ms.memory.store(input);
+                    return {
+                        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+                    };
+                }
+
+                case "memory_store_batch": {
+                    const a = args as unknown as MCPStoreBatchArgs;
+                    const inputs: MemoryStoreInput[] = a.memories.map((m) => ({
+                        actorId: m.actorId ?? defaultActorId,
+                        content: m.content,
+                        importance: m.importance,
+                        tags: m.tags,
+                        memoryType: m.memoryType as MemoryType | undefined,
+                        metadata: m.metadata,
+                    }));
+                    const result = await ms.memory.storeBatch(inputs);
+                    return {
+                        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+                    };
+                }
+
+                case "memory_get": {
+                    const a = args as unknown as MCPGetArgs;
+                    const result = await ms.memory.get(a.id);
                     return {
                         content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
                     };
@@ -385,6 +526,43 @@ export function createServer({ config, defaultActorId }: { config: MemStackConfi
                         content: [
                             { type: "text" as const, text: JSON.stringify({ deleted: true }, null, 2) },
                         ],
+                    };
+                }
+
+                case "memory_delete_many": {
+                    const a = args as unknown as MCPDeleteManyArgs;
+                    const count = await ms.memory.deleteMany(a.ids);
+                    return {
+                        content: [{ type: "text" as const, text: JSON.stringify({ deleted: count }, null, 2) }],
+                    };
+                }
+
+                case "memory_touch": {
+                    const a = args as unknown as MCPTouchArgs;
+                    await ms.memory.touch(a.id);
+                    return {
+                        content: [{ type: "text" as const, text: JSON.stringify({ touched: true }, null, 2) }],
+                    };
+                }
+
+                case "memory_export": {
+                    const a = args as unknown as MCPExportArgs;
+                    const result = await ms.export(a.actorId ?? defaultActorId);
+                    return {
+                        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+                    };
+                }
+
+                case "memory_import": {
+                    const a = args as unknown as MCPImportArgs;
+                    const snapshot: MemStackSnapshot = {
+                        version: 1,
+                        memories: a.memories,
+                        exportedAt: new Date().toISOString(),
+                    };
+                    await ms.import(snapshot);
+                    return {
+                        content: [{ type: "text" as const, text: JSON.stringify({ imported: a.memories.length }, null, 2) }],
                     };
                 }
 

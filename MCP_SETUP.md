@@ -81,6 +81,8 @@ Nearly every MCP client uses some variant of this JSON shape for a local (stdio)
 
 If your client isn't in the list below: look for its MCP docs, find where it wants `command`/`args`/`env` (sometimes under a different top-level key — `mcpServers`, `mcp`, `context_servers`, `servers`), and drop in the block above. The `command`/`args` pair is always equivalent to running `npx -y @memstack/mcp` in a terminal with those env vars set.
 
+**Running one shared server instead of one-per-client:** every config above spawns `memstack-mcp` as a local subprocess per client (stdio transport) — fine for one agent per machine, but each client gets its own process and, if using disk/markdown storage, its own file lock. For multiple agents/processes sharing one memory server over the network, run `memstack-mcp --http --port 3939` once and point Streamable-HTTP-capable clients at `http://host:3939/mcp` instead of a `command`/`args` pair. See [`packages/mcp/README.md`](packages/mcp/README.md#transport) for details — this is newer than stdio support in the MCP ecosystem, so check your client's docs for Streamable HTTP support before relying on it.
+
 ---
 
 ## Client-specific setup
