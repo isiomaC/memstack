@@ -38,10 +38,42 @@ Each item defines its scope, verification condition, and assignee. The orchestra
   - Integration pattern section is present
   - Best practices section is present
 
+## Phase 3: Hardening & Scale
+
+- [ ] 3.1 Wire e2e tests into CI
+  **Agent:** @implementer
+  **Scope:** `ci.yml` never runs the 82 e2e tests (`pnpm test:e2e`), which need real service instances (Postgres/Redis/Qdrant/Neo4j/Weaviate/MongoDB — see `docker-compose.yml` and `e2e/run-all.sh`). Add a CI job that stands these up via GitHub Actions `services:` and runs the e2e suite. This is also the mechanism for promoting the still-gated experimental adapters (Pinecone/Turso/Zep/Mem0/Upstash/Chroma — see README's Experimental table): once a real e2e run against live credentials passes in CI, uncomment that adapter's export in `src/index.ts`.
+  **Verify:**
+  - `ci.yml` has a job that runs `pnpm test:e2e` (or equivalent) against real service containers, not mocks
+  - The job passes on a clean run
+  - At least one previously-experimental adapter has a documented path (secrets + CI job) to promotion, even if not all six are promoted in this item
+
+- [ ] 3.2 Dedupe CI job preamble
+  **Agent:** @implementer
+  **Scope:** All 6 `ci.yml` jobs (core, config-env, mcp, cli, server) repeat the same checkout/pnpm-setup/node-setup/core-build/config-env-build steps. Collapse this via a build matrix or a shared "build once, reuse via artifact/cache" step to cut CI time and the maintenance burden of updating N jobs every time a new shared package (like `config-env`) is added — exactly the class of bug fixed in the "fix(ci): build config-env in the core job" commit.
+  **Verify:**
+  - Total distinct `pnpm install` / core-build invocations across the workflow is reduced
+  - All existing jobs still pass with equivalent coverage (no test silently dropped)
+
+- [ ] 3.3 Server production hardening
+  **Agent:** @implementer
+  **Scope:** `packages/server/src/index.ts`'s rate limiter keys on the client-spoofable `x-forwarded-for` header (safe only behind a trusted proxy that overwrites it); the `MEMSTACK_API_KEY` bearer-token comparison uses `===` instead of a timing-safe compare (`crypto.timingSafeEqual`); there's no structured logging or request IDs, making self-hosted deployments hard to debug/audit.
+  **Verify:**
+  - Rate limiter either documents the trusted-proxy assumption clearly or supports a safer default (e.g. connection-level IP)
+  - Bearer-token comparison uses a constant-time compare
+  - Requests get a correlation/request ID surfaced in at least error responses and/or logs
+
+- [ ] 3.4 Benchmarks suite
+  **Agent:** @implementer
+  **Scope:** README already lists this under "Most needed contributions." Build a benchmark harness comparing retrieval quality (precision/recall on a labeled query set) and token-cost curves across storage adapters and against Mem0/raw-vector-DB baselines, per the README's positioning ("open-source alternative to Mem0").
+  **Verify:**
+  - A runnable benchmark script/package exists with documented methodology
+  - Results are captured somewhere referenceable from the README (even a linked doc/gist is fine for v1)
+
 ## Exit Criteria
 
 - [ ] All items above marked `[x]`
 - [ ] `pnpm check` exits 0
-- [ ] `pnpm test` exits 0 (393 tests)
+- [ ] `pnpm test` exits 0 (414 tests)
 - [ ] `pnpm build` succeeds
 - [ ] `git status` is clean (no uncommitted changes)
