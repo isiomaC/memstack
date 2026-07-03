@@ -673,7 +673,7 @@ new OpenAIEmbeddingAdapter({ apiKey: "...", baseURL: "https://api.voyageai.com/v
 
 ### Storage Adapters
 
-MemStack ships with **11 production-ready storage adapters (7 experimental)** — every major backend, zero peer dependencies, all client-injected.
+MemStack ships with **12 production-ready storage adapters (6 experimental)** — every major backend, zero peer dependencies, all client-injected.
 
 ### Production (e2e verified against real instances)
 
@@ -689,6 +689,7 @@ MemStack ships with **11 production-ready storage adapters (7 experimental)** �
 | Adapter | Backend | Vector search |
 |---|---|---|
 | `PostgresStorageAdapter` | PostgreSQL + pgvector | HNSW native |
+| `SQLiteStorageAdapter` | SQLite (better-sqlite3) | Cosine in-memory |
 
 **Vector databases:**
 | Adapter | Backend |
@@ -714,7 +715,6 @@ Available via direct source import. Not yet in the barrel export — uncomment i
 
 | Adapter | Backend | Blocker |
 |---|---|---|
-| `SQLiteStorageAdapter` | SQLite (better-sqlite3) | Native binary for Node 24 |
 | `TursoStorageAdapter` | Turso (libsql) | Cloud-only (needs Turso account) |
 | `ChromaStorageAdapter` | ChromaDB | Embedding function dependency |
 | `PineconeStorageAdapter` | Pinecone | Cloud-only (needs API key) |
@@ -783,7 +783,6 @@ class MyStorage implements StorageProvider {
 | Neo4j | Neo4j vector index | No | ✅ Production |
 | Hybrid | Delegates to cache/durable | If durable supports | ✅ Production |
 | SQLite | Cosine in-memory | Yes | ✅ Production |
-| Hybrid | Delegates to cache/durable | If durable supports | ✅ Production |
 
 ---
 
