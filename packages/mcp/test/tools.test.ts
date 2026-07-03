@@ -25,7 +25,7 @@ function toolResult(result: { content: { type: string; text?: string }[] }) {
 }
 
 describe("MCP tools — full coverage", () => {
-  it("lists all 16 tools, including the previously-missing ones", async () => {
+  it("lists all 18 tools", async () => {
     const client = await connectedClient();
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);

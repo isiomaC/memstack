@@ -22,6 +22,7 @@ const TOOLS = [
             type: "object" as const,
             properties: {
                 content: { type: "string", description: "The memory content text" },
+                actorId: { type: "string", description: "Actor ID. Defaults to the current session actor." },
                 importance: { type: "number", description: "Importance score (0.0-1.0). Auto-scored if omitted." },
                 tags: { type: "array", items: { type: "string" }, description: "Tags for categorization. Auto-extracted if omitted." },
                 memoryType: { type: "string", description: "Memory type (interaction, summary, observation, fact, reflection). Default: interaction." },
@@ -142,8 +143,8 @@ const TOOLS = [
             properties: {
                 type: {
                     type: "string",
-                    enum: ["byAge", "byImportance", "byCount", "byType", "custom", "compose"],
-                    description: "Prune strategy type",
+                    enum: ["byAge", "byImportance", "byCount", "byType", "compose"],
+                    description: "Prune strategy type. Note: 'custom' is not available via MCP because it requires a JS function.",
                 },
                 maxAge: { type: "number", description: "Max age in seconds (for byAge). Memories older than this are removed." },
                 minImportance: { type: "number", description: "Minimum importance (for byImportance). Memories below this are removed." },
@@ -253,8 +254,8 @@ const TOOLS = [
             properties: {
                 type: {
                     type: "string",
-                    enum: ["byAge", "byImportance", "byCount", "byType", "custom", "compose"],
-                    description: "Prune strategy type to preview",
+                    enum: ["byAge", "byImportance", "byCount", "byType", "compose"],
+                    description: "Prune strategy type to preview. Note: 'custom' is not available via MCP because it requires a JS function.",
                 },
                 maxAge: { type: "number", description: "Max age in seconds (for byAge)" },
                 minImportance: { type: "number", description: "Minimum importance (for byImportance)" },
@@ -333,7 +334,7 @@ interface MCPSummarizeArgs {
 }
 
 interface MCPPruneArgs {
-    type: "byAge" | "byImportance" | "byCount" | "byType" | "custom" | "compose";
+    type: "byAge" | "byImportance" | "byCount" | "byType" | "compose";
     maxAge?: number;
     minImportance?: number;
     maxPerActor?: number;
