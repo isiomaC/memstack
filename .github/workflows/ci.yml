@@ -17,6 +17,11 @@ jobs:
         with: { node-version: 22, cache: 'pnpm' }
       - run: pnpm install
       - run: npx tsup src/index.ts --format cjs,esm --dts --clean
+      # `npx vitest run` from repo root discovers every workspace package's
+      # tests too (its default include glob isn't limited to ./test), and
+      # cli/mcp/server's tests import @memstack/config-env, so it needs to be
+      # built here as well or those suites fail to resolve the import.
+      - run: cd packages/config-env && npx tsup src/index.ts --format esm --dts --clean
       - run: npx tsc --noEmit
       - run: npx vitest run
 
