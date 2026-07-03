@@ -1,7 +1,25 @@
-import { Hono } from "hono";
+import { readFileSync } from "node:fs";
+import { Hono, type Context } from "hono";
 import { MemStack } from "@memstack/core";
-import type { MemoryType } from "@memstack/core";
+import type { MemoryType, MemStackSnapshot } from "@memstack/core";
+import type { z } from "zod";
 import { loadConfig } from "./config.js";
+import {
+  StoreMemorySchema,
+  BatchStoreSchema,
+  RetrieveSchema,
+  ContextSchema,
+  ProcessSchema,
+  SummarizeSchema,
+  PruneStrategySchema,
+  MergeSchema,
+  PurgeSchema,
+  DeleteManySchema,
+  ImportSchema,
+} from "./schemas.js";
+import { buildOpenApiDocument } from "./openapi.js";
+
+const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as { version: string };
 
 const app = new Hono();
 
@@ -11,6 +29,17 @@ async function getMs(): Promise<MemStack> {
     _ms = new MemStack(await loadConfig());
   }
   return _ms;
+}
+
+type ParsedBody<T> = { ok: true; data: T } | { ok: false; response: Response };
+
+async function parseBody<T>(c: Context, schema: z.ZodType<T>): Promise<ParsedBody<T>> {
+  const raw = await c.req.json().catch(() => undefined);
+  const result = schema.safeParse(raw);
+  if (!result.success) {
+    return { ok: false, response: c.json({ error: "Validation failed", issues: result.error.issues }, 400) };
+  }
+  return { ok: true, data: result.data };
 }
 
 app.use("*", async (c, next) => {
@@ -57,9 +86,10 @@ app.use("*", async (c, next) => {
 });
 
 app.post("/v1/memories", async (c) => {
+  const parsed = await parseBody(c, StoreMemorySchema);
+  if (!parsed.ok) return parsed.response;
   try {
-    const body = await c.req.json();
-    const memory = await (await getMs()).memory.store(body);
+    const memory = await (await getMs()).memory.store(parsed.data);
     return c.json(memory, 201);
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
@@ -67,9 +97,10 @@ app.post("/v1/memories", async (c) => {
 });
 
 app.post("/v1/memories/batch", async (c) => {
+  const parsed = await parseBody(c, BatchStoreSchema);
+  if (!parsed.ok) return parsed.response;
   try {
-    const { memories } = await c.req.json();
-    const result = await (await getMs()).memory.storeBatch(memories);
+    const result = await (await getMs()).memory.storeBatch(parsed.data.memories);
     return c.json(result, 201);
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
@@ -77,9 +108,10 @@ app.post("/v1/memories/batch", async (c) => {
 });
 
 app.post("/v1/memories/retrieve", async (c) => {
+  const parsed = await parseBody(c, RetrieveSchema);
+  if (!parsed.ok) return parsed.response;
   try {
-    const body = await c.req.json();
-    const results = await (await getMs()).memory.retrieve(body);
+    const results = await (await getMs()).memory.retrieve(parsed.data);
     return c.json(results);
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
@@ -87,9 +119,10 @@ app.post("/v1/memories/retrieve", async (c) => {
 });
 
 app.post("/v1/memories/context", async (c) => {
+  const parsed = await parseBody(c, ContextSchema);
+  if (!parsed.ok) return parsed.response;
   try {
-    const body = await c.req.json();
-    const ctx = await (await getMs()).memory.compileContext(body);
+    const ctx = await (await getMs()).memory.compileContext(parsed.data);
     return c.json({
       context: ctx.systemPrompt,
       tokenCount: ctx.tokenEstimate,
@@ -150,9 +183,10 @@ app.delete("/v1/memories/:id", async (c) => {
 });
 
 app.post("/v1/memories/delete-many", async (c) => {
+  const parsed = await parseBody(c, DeleteManySchema);
+  if (!parsed.ok) return parsed.response;
   try {
-    const { ids } = await c.req.json();
-    const deleted = await (await getMs()).memory.deleteMany(ids);
+    const deleted = await (await getMs()).memory.deleteMany(parsed.data.ids);
     return c.json({ deleted });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
@@ -160,9 +194,10 @@ app.post("/v1/memories/delete-many", async (c) => {
 });
 
 app.post("/v1/memories/purge", async (c) => {
+  const parsed = await parseBody(c, PurgeSchema);
+  if (!parsed.ok) return parsed.response;
   try {
-    const { actorId } = await c.req.json();
-    const count = await (await getMs()).memory.purgeActor(actorId);
+    const count = await (await getMs()).memory.purgeActor(parsed.data.actorId);
     return c.json({ purged: count });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
@@ -170,9 +205,10 @@ app.post("/v1/memories/purge", async (c) => {
 });
 
 app.post("/v1/memories/merge", async (c) => {
+  const parsed = await parseBody(c, MergeSchema);
+  if (!parsed.ok) return parsed.response;
   try {
-    const { ids } = await c.req.json();
-    const memory = await (await getMs()).memory.merge(ids);
+    const memory = await (await getMs()).memory.merge(parsed.data.ids);
     return c.json(memory);
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
@@ -180,9 +216,10 @@ app.post("/v1/memories/merge", async (c) => {
 });
 
 app.post("/v1/memories/process", async (c) => {
+  const parsed = await parseBody(c, ProcessSchema);
+  if (!parsed.ok) return parsed.response;
   try {
-    const body = await c.req.json();
-    const result = await (await getMs()).process(body);
+    const result = await (await getMs()).process(parsed.data);
     return c.json(result, 201);
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
@@ -199,20 +236,28 @@ app.post("/v1/memories/:id/touch", async (c) => {
 });
 
 app.post("/v1/memories/import", async (c) => {
+  const parsed = await parseBody(c, ImportSchema);
+  if (!parsed.ok) return parsed.response;
   try {
-    const body = await c.req.json();
-    const snapshot = Array.isArray(body) ? { version: 1 as const, memories: body, exportedAt: new Date().toISOString() } : body;
+    const body = parsed.data;
+    const memories = Array.isArray(body) ? body : body.memories;
+    const exportedAt = Array.isArray(body) ? new Date().toISOString() : (body.exportedAt ?? new Date().toISOString());
+    // The snapshot's memories come from a prior export() call; we validate the
+    // envelope shape above but trust the memory contents rather than re-validating
+    // every field of every memory.
+    const snapshot = { version: 1 as const, memories, exportedAt } as unknown as MemStackSnapshot;
     await (await getMs()).import(snapshot);
-    return c.json({ imported: snapshot.memories?.length ?? 0 }, 201);
+    return c.json({ imported: memories.length }, 201);
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
   }
 });
 
 app.post("/v1/summarize", async (c) => {
+  const parsed = await parseBody(c, SummarizeSchema);
+  if (!parsed.ok) return parsed.response;
   try {
-    const body = await c.req.json();
-    const result = await (await getMs()).memory.summarize(body);
+    const result = await (await getMs()).memory.summarize(parsed.data);
     return c.json({
       summarized: result.deletedCount,
       summaryId: result.summary.id,
@@ -223,9 +268,10 @@ app.post("/v1/summarize", async (c) => {
 });
 
 app.post("/v1/prune", async (c) => {
+  const parsed = await parseBody(c, PruneStrategySchema);
+  if (!parsed.ok) return parsed.response;
   try {
-    const body = await c.req.json();
-    const result = await (await getMs()).memory.prune(body);
+    const result = await (await getMs()).memory.prune(parsed.data);
     return c.json({ pruned: result.count });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
@@ -233,9 +279,10 @@ app.post("/v1/prune", async (c) => {
 });
 
 app.post("/v1/prune/dry-run", async (c) => {
+  const parsed = await parseBody(c, PruneStrategySchema);
+  if (!parsed.ok) return parsed.response;
   try {
-    const body = await c.req.json();
-    const result = await (await getMs()).memory.dryRunPrune(body);
+    const result = await (await getMs()).memory.dryRunPrune(parsed.data);
     return c.json(result);
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
@@ -298,12 +345,14 @@ app.get("/health", async (c) => {
     return c.json({
       status: status.storage ? "ok" : "degraded",
       storage: status.storage ? "connected" : "disconnected",
-      version: "0.6.4",
+      version: pkg.version,
     });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
   }
 });
+
+app.get("/openapi.json", (c) => c.json(buildOpenApiDocument(pkg.version)));
 
 setInterval(() => {
   const now = Date.now();
@@ -313,4 +362,7 @@ setInterval(() => {
 }, 60000).unref();
 
 const port = parseInt(process.env.PORT ?? "3000", 10);
+
+// Bun and Deno auto-start an HTTP server from this shape when the module is
+// run directly. Node has no equivalent — see serve.ts for the Node entry point.
 export default { port, fetch: app.fetch };

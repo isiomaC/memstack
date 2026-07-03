@@ -169,4 +169,55 @@ describe("Server HTTP integration", () => {
     const { status } = await fetchAPI("/v1/stats/test");
     expect(status).toBe(200);
   });
+
+  it("GET /openapi.json returns a generated OpenAPI document", async () => {
+    if (!bunAvailable) return;
+    const { status, body } = await fetchAPI("/openapi.json");
+    expect(status).toBe(200);
+    expect(body.openapi).toBe("3.1.0");
+    expect(body.paths["/v1/memories"].post).toBeDefined();
+  });
+
+  it("POST /v1/memories returns 400 with issues when content is missing", async () => {
+    if (!bunAvailable) return;
+    const { status, body } = await fetchAPI("/v1/memories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actorId: "test" }),
+    });
+    expect(status).toBe(400);
+    expect(body.error).toBe("Validation failed");
+    expect(body.issues.length).toBeGreaterThan(0);
+  });
+
+  it("POST /v1/memories returns 400 when importance is out of range", async () => {
+    if (!bunAvailable) return;
+    const { status } = await fetchAPI("/v1/memories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actorId: "test", content: "x", importance: 5 }),
+    });
+    expect(status).toBe(400);
+  });
+
+  it("POST /v1/prune/dry-run rejects unsupported custom strategy over REST", async () => {
+    if (!bunAvailable) return;
+    const { status } = await fetchAPI("/v1/prune/dry-run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "custom" }),
+    });
+    expect(status).toBe(400);
+  });
+
+  it("POST /v1/prune/dry-run accepts a valid byAge strategy", async () => {
+    if (!bunAvailable) return;
+    const { status, body } = await fetchAPI("/v1/prune/dry-run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "byAge", maxAge: 86400 }),
+    });
+    expect(status).toBe(200);
+    expect(body.count).toBeGreaterThanOrEqual(0);
+  });
 });
