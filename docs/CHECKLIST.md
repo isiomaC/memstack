@@ -1,6 +1,6 @@
 # MemStack Implementation Checklist
 
-> **Test**: `pnpm test` (393) | **E2E**: `pnpm test:e2e` (82) | **Type check**: `pnpm check`
+> **Test**: `pnpm test` (469) | **E2E**: `pnpm test:e2e` (82) | **Type check**: `pnpm check`
 
 ---
 
@@ -28,14 +28,32 @@
 | UpstashStorageAdapter | 28 | — | ❌ exp |
 | Neo4jStorageAdapter | 12 | 11 | ✅ |
 
+### LLM & embedding adapters
+| Adapter | Unit | Notes |
+|---|---|---|
+| OpenAILLMAdapter | 8 | incl. `completeStream` SSE parsing |
+| AnthropicLLMAdapter | 5 | mocks `@anthropic-ai/sdk` |
+| GroqLLMAdapter | 5 | incl. `completeStream` SSE parsing |
+| OllamaLLMAdapter | 5 | no-auth local endpoint |
+| OpenAIEmbeddingAdapter | 7 | |
+| CohereEmbeddingAdapter | 7 | |
+
+Previously had zero test coverage (request shape, response parsing, and
+error/retryable classification were unverified for every real LLM/embedding
+provider). Fixed along the way: both OpenAI's and Groq's `completeStream`
+silently dropped the final usage-only SSE frame (real providers send total
+token counts in a frame with empty `delta.content`), so callers never saw
+accurate final token counts — now yielded.
+
 ### Memory pipeline
 - [x] Configurable limits, O(1) hash index, custom token counter
 - [x] Messages format output, chunked summarization, compose prune
 - [x] purgeActor, merge, stats, retrieveByTimeRange, summarizeStream
 
 ### Distribution packages
-- [x] `@memstack/mcp` — 12 tools, 2 resources, 1 prompt, env var config
+- [x] `@memstack/mcp` — 18 tools, 2 resources, 1 prompt, env var config, Streamable HTTP transport
 - [x] `@memstack/cli` — 12 commands, JSON output, env var config
+  - Integration-tested end-to-end (`packages/cli/test/commands.test.ts`, 18 tests): builds the real CLI binary and spawns it as a subprocess against disk storage and a local mock LLM HTTP server, covering all 12 commands plus their required-flag error paths. Previously only `loadConfig()` was tested.
 - [x] `@memstack/server` — 15 REST endpoints, Hono + Bun, Docker + wrangler
 
 ### Docs
@@ -43,7 +61,8 @@
 - [x] distribution.md, PUBLISHING.md
 - [x] ADR: 0001-no-peer-dependencies
 - [x] Migration: mem0-to-memstack
-- [x] Package READMEs: core, mcp, cli
+- [x] Package READMEs: core, mcp, cli, server
+- [x] Skill: `memstack-cli` (`packages/skills/memstack-cli/SKILL.md`)
 
 ---
 
@@ -52,22 +71,10 @@
 - [ ] `@memstack/relationships` package
 - [ ] `@memstack/langchain` package
 - [ ] `@memstack/ai-sdk` package
-- [ ] `@memstack/server` README
 - [ ] E2E: SQLite, Chroma (blocked by platform deps)
-- [ ] E2E: Pinecone, Upstash, Mem0, Zep, Turso (cloud-only, needs API keys)
+- [ ] E2E: Pinecone, Upstash, Mem0, Zep, Turso (cloud-only, needs API keys — unit tests fully mock the SDK/HTTP client, so request shape and auth against the real service remain unverified until credentials are available)
 - [ ] Benchmarks vs Mem0
 - [ ] Python port
-- [ ] **Skill: `memstack-cli`** — teach LLMs to use `@memstack/cli` for persistent agent memory
-  - [ ] Write `packages/skills/memstack-cli/SKILL.md`
-    - [ ] Section: What MemStack is and when to use it (2-3 sentences)
-    - [ ] Section: Installation (`npm install -g @memstack/cli`, `npx`, verify with `health`)
-    - [ ] Section: Configuration — all 8 env vars (`MEMSTACK_STORAGE`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `MEMSTACK_OPENAI_BASE_URL`, `MEMSTACK_LLM_MODEL`, `MEMSTACK_DIR`, `DATABASE_URL`, `SQLITE_PATH`, `REDIS_URL`, `MEMSTACK_EMBED_ON_STORE`), their defaults, and storage backend options (memory, disk, markdown, postgres, sqlite, redis)
-    - [ ] Section: Command reference — all 12 commands with required/optional flags, valid values, example invocations, and JSON output schema
-      - `store`, `retrieve`, `context`, `summarize`, `prune`, `purge`, `merge`, `stats`, `delete`, `health`, `export`, `import`
-    - [ ] Section: Integration pattern — the memory loop: retrieve context before turn → respond → store interaction after turn. Periodic maintenance: summarize old, prune stale.
-    - [ ] Section: Best practices — when to use each command, importance scoring guidance (0.0–1.0), token budget management, actor ID conventions (per-agent, per-session, per-user), storage backend choice tradeoffs
-  - [ ] Verify: run `pnpm check && pnpm test` in the CLI package
-  - [ ] File location: `packages/skills/memstack-cli/SKILL.md` (following pattern from distribution.md § OpenAI Skills Manifest)
 
 ## 🛠 Agent Tasks
 
@@ -92,7 +99,7 @@
 
 | Type | Count |
 |---|---|
-| Unit tests | 393 |
+| Unit tests | 469 |
 | E2E tests | 82 |
 | Adapters exported | 11 |
 | Adapters experimental | 7 |
