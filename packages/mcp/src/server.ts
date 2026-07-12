@@ -137,7 +137,7 @@ const TOOLS = [
     {
         name: "memory_prune",
         description:
-            "Prune (delete) memories matching the given strategy. Returns the pruned memory IDs and count. Handle with care.",
+            "Prune (delete) memories matching the given strategy. Scoped to a single actor — defaults to the current session actor. Returns the pruned memory IDs and count. Handle with care.",
         inputSchema: {
             type: "object" as const,
             properties: {
@@ -146,6 +146,7 @@ const TOOLS = [
                     enum: ["byAge", "byImportance", "byCount", "byType", "compose"],
                     description: "Prune strategy type. Note: 'custom' is not available via MCP because it requires a JS function.",
                 },
+                actorId: { type: "string", description: "Actor ID to scope pruning to. Defaults to the current session actor." },
                 maxAge: { type: "number", description: "Max age in seconds (for byAge). Memories older than this are removed." },
                 minImportance: { type: "number", description: "Minimum importance (for byImportance). Memories below this are removed." },
                 maxPerActor: { type: "number", description: "Maximum memories per actor (for byCount). Excess memories are removed." },
@@ -248,7 +249,7 @@ const TOOLS = [
     {
         name: "memory_dry_run_prune",
         description:
-            "Preview what would be pruned by a given strategy WITHOUT actually deleting. Returns the memory IDs that would be removed.",
+            "Preview what would be pruned by a given strategy WITHOUT actually deleting. Scoped to a single actor — defaults to the current session actor. Returns the memory IDs that would be removed.",
         inputSchema: {
             type: "object" as const,
             properties: {
@@ -257,6 +258,7 @@ const TOOLS = [
                     enum: ["byAge", "byImportance", "byCount", "byType", "compose"],
                     description: "Prune strategy type to preview. Note: 'custom' is not available via MCP because it requires a JS function.",
                 },
+                actorId: { type: "string", description: "Actor ID to scope pruning to. Defaults to the current session actor." },
                 maxAge: { type: "number", description: "Max age in seconds (for byAge)" },
                 minImportance: { type: "number", description: "Minimum importance (for byImportance)" },
                 maxPerActor: { type: "number", description: "Maximum memories per actor (for byCount)" },
@@ -335,6 +337,7 @@ interface MCPSummarizeArgs {
 
 interface MCPPruneArgs {
     type: "byAge" | "byImportance" | "byCount" | "byType" | "compose";
+    actorId?: string;
     maxAge?: number;
     minImportance?: number;
     maxPerActor?: number;
@@ -353,7 +356,7 @@ interface MCPDeleteArgs {
     id: string;
 }
 
-function buildPruneStrategy(args: MCPPruneArgs): PruneStrategy {
+function buildPruneStrategy(args: MCPPruneArgs, defaultActorId: string): PruneStrategy {
     const VALID_TYPES = ["byAge", "byImportance", "byCount", "byType", "custom", "compose"];
     const type = args.type ?? "byAge";
     if (!VALID_TYPES.includes(type)) {
@@ -361,6 +364,7 @@ function buildPruneStrategy(args: MCPPruneArgs): PruneStrategy {
     }
     return {
         type: type as PruneStrategy["type"],
+        actorId: (args.actorId ?? defaultActorId).trim(),
         maxAge: args.maxAge,
         minImportance: args.minImportance,
         maxPerActor: args.maxPerActor,
@@ -518,7 +522,7 @@ export function createServer({
                 }
 
                 case "memory_prune": {
-                    const strategy = buildPruneStrategy(args as unknown as MCPPruneArgs);
+                    const strategy = buildPruneStrategy(args as unknown as MCPPruneArgs, defaultActorId);
                     const result = await ms.memory.prune(strategy);
                     return {
                         content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
@@ -609,7 +613,7 @@ export function createServer({
                 }
 
                 case "memory_dry_run_prune": {
-                    const strategy = buildPruneStrategy(args as unknown as MCPPruneArgs);
+                    const strategy = buildPruneStrategy(args as unknown as MCPPruneArgs, defaultActorId);
                     const result = await ms.memory.dryRunPrune(strategy);
                     return {
                         content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],

@@ -67,6 +67,7 @@ export const SummarizeSchema = z.object({
 
 export interface RestPruneStrategy {
   type: "byAge" | "byImportance" | "byCount" | "byType" | "compose";
+  actorId?: string;
   maxAge?: number;
   minImportance?: number;
   maxPerActor?: number;
@@ -76,9 +77,16 @@ export interface RestPruneStrategy {
 
 // "custom" prune (a JS predicate function) can't cross JSON, so it's excluded
 // from the REST-reachable type set — everything else in PruneStrategy is.
+//
+// actorId is optional in the schema (nested `strategies` entries don't need
+// it — only the top-level scan is ever actor-scoped) but the /v1/prune and
+// /v1/prune/dry-run route handlers reject a request that omits it at the top
+// level, since there's no "current session actor" to fall back on the way
+// the CLI/MCP surfaces have.
 export const PruneStrategySchema: z.ZodType<RestPruneStrategy> = z.lazy(() =>
   z.object({
     type: z.enum(["byAge", "byImportance", "byCount", "byType", "compose"]),
+    actorId: z.string().min(1).optional(),
     maxAge: z.number().nonnegative().optional(),
     minImportance: z.number().min(0).max(1).optional(),
     maxPerActor: z.number().int().positive().optional(),

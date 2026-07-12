@@ -270,6 +270,9 @@ app.post("/v1/summarize", async (c) => {
 app.post("/v1/prune", async (c) => {
   const parsed = await parseBody(c, PruneStrategySchema);
   if (!parsed.ok) return parsed.response;
+  if (!parsed.data.actorId) {
+    return c.json({ error: "actorId is required to prune (scopes deletion to a single actor)" }, 400);
+  }
   try {
     const result = await (await getMs()).memory.prune(parsed.data);
     return c.json({ pruned: result.count });
@@ -281,6 +284,9 @@ app.post("/v1/prune", async (c) => {
 app.post("/v1/prune/dry-run", async (c) => {
   const parsed = await parseBody(c, PruneStrategySchema);
   if (!parsed.ok) return parsed.response;
+  if (!parsed.data.actorId) {
+    return c.json({ error: "actorId is required to preview pruning (scopes the scan to a single actor)" }, 400);
+  }
   try {
     const result = await (await getMs()).memory.dryRunPrune(parsed.data);
     return c.json(result);

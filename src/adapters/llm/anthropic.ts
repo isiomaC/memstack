@@ -75,7 +75,20 @@ export class AnthropicLLMAdapter implements LLMProvider {
     } catch (err) {
       if (err instanceof MemStackError) throw err;
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("Cannot find package '@anthropic-ai/sdk'") || msg.includes("Cannot find module '@anthropic-ai/sdk'")) {
+      // Node's ERR_MODULE_NOT_FOUND/MODULE_NOT_FOUND codes are the stable
+      // signal for a real "package isn't installed" failure; the message-text
+      // fallback covers bundler/dev-server module loaders (e.g. Vite, used
+      // under this project's own test runner) that don't set `code` at all.
+      // Either way, requiring the package name in the message keeps this
+      // from misattributing an unrelated failure to a missing SDK.
+      const code = (err as { code?: string } | undefined)?.code;
+      const isMissingSdk =
+        msg.includes("@anthropic-ai/sdk") &&
+        (code === "ERR_MODULE_NOT_FOUND" ||
+          code === "MODULE_NOT_FOUND" ||
+          /cannot find (package|module)/i.test(msg) ||
+          /failed to (load|resolve)/i.test(msg));
+      if (isMissingSdk) {
         throw new MemStackError("LLM_ERROR", "Anthropic adapter requires @anthropic-ai/sdk. Install it: npm install @anthropic-ai/sdk", {
           retryable: false,
         });

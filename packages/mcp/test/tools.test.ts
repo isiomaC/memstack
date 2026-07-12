@@ -128,6 +128,82 @@ describe("MCP tools — full coverage", () => {
     expect(retrieved.some((m: { content: string }) => m.content === "exported memory")).toBe(true);
   });
 
+  it("memory_prune defaults to the session actor and never touches other actors' memories", async () => {
+    const ms = new MemStack({ llm: mockLLM as never, storage: new InMemoryStorageAdapter() });
+    const client = await connectedClient(ms);
+
+    // Stored with no actorId -> defaults to "test-actor" (the session actor).
+    await client.callTool({ name: "memory_store", arguments: { content: "low importance", importance: 0.1 } });
+    await client.callTool({
+      name: "memory_store",
+      arguments: { content: "other actor's low importance memory", importance: 0.1, actorId: "someone-else" },
+    });
+
+    const result = toolResult(
+      (await client.callTool({
+        name: "memory_prune",
+        arguments: { type: "byImportance", minImportance: 0.5 },
+      })) as never,
+    );
+    expect(result.count).toBe(1);
+
+    const survivor = toolResult(
+      (await client.callTool({ name: "memory_retrieve", arguments: { actorId: "someone-else" } })) as never,
+    );
+    expect(survivor).toHaveLength(1);
+    expect(survivor[0].content).toBe("other actor's low importance memory");
+  });
+
+  it("memory_dry_run_prune defaults to the session actor and never previews another actor's memories", async () => {
+    const ms = new MemStack({ llm: mockLLM as never, storage: new InMemoryStorageAdapter() });
+    const client = await connectedClient(ms);
+
+    await client.callTool({ name: "memory_store", arguments: { content: "low importance", importance: 0.1 } });
+    await client.callTool({
+      name: "memory_store",
+      arguments: { content: "other actor's low importance memory", importance: 0.1, actorId: "someone-else" },
+    });
+
+    const result = toolResult(
+      (await client.callTool({
+        name: "memory_dry_run_prune",
+        arguments: { type: "byImportance", minImportance: 0.5 },
+      })) as never,
+    );
+    expect(result.count).toBe(1);
+
+    // Still a dry run -- nothing deleted for either actor.
+    const own = toolResult(
+      (await client.callTool({ name: "memory_retrieve", arguments: {} })) as never,
+    );
+    expect(own).toHaveLength(1);
+  });
+
+  it("memory_prune with an explicit actorId scopes to that actor instead of the session default", async () => {
+    const ms = new MemStack({ llm: mockLLM as never, storage: new InMemoryStorageAdapter() });
+    const client = await connectedClient(ms);
+
+    await client.callTool({ name: "memory_store", arguments: { content: "session actor memory", importance: 0.1 } });
+    await client.callTool({
+      name: "memory_store",
+      arguments: { content: "target actor memory", importance: 0.1, actorId: "target-actor" },
+    });
+
+    const result = toolResult(
+      (await client.callTool({
+        name: "memory_prune",
+        arguments: { type: "byImportance", minImportance: 0.5, actorId: "target-actor" },
+      })) as never,
+    );
+    expect(result.count).toBe(1);
+
+    const sessionActorMemories = toolResult(
+      (await client.callTool({ name: "memory_retrieve", arguments: {} })) as never,
+    );
+    expect(sessionActorMemories).toHaveLength(1);
+    expect(sessionActorMemories[0].content).toBe("session actor memory");
+  });
+
   it("createServer reuses a provided MemStack instance instead of constructing a new one", async () => {
     const ms = new MemStack({ llm: mockLLM as never, storage: new InMemoryStorageAdapter() });
     const clientA = await connectedClient(ms);

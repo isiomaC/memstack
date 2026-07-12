@@ -215,9 +215,43 @@ describe("Server HTTP integration", () => {
     const { status, body } = await fetchAPI("/v1/prune/dry-run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "byAge", maxAge: 86400 }),
+      body: JSON.stringify({ type: "byAge", maxAge: 86400, actorId: "test" }),
     });
     expect(status).toBe(200);
     expect(body.count).toBeGreaterThanOrEqual(0);
+  });
+
+  it("POST /v1/prune/dry-run rejects a request with no actorId", async () => {
+    if (!bunAvailable) return;
+    const { status, body } = await fetchAPI("/v1/prune/dry-run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "byAge", maxAge: 86400 }),
+    });
+    expect(status).toBe(400);
+    expect(body.error).toMatch(/actorId/i);
+  });
+
+  it("POST /v1/prune never deletes another actor's memories", async () => {
+    if (!bunAvailable) return;
+    await fetchAPI("/v1/memories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actorId: "prune-victim", content: "should survive", importance: 0.01 }),
+    });
+    const { status, body } = await fetchAPI("/v1/prune", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "byImportance", minImportance: 0.5, actorId: "test" }),
+    });
+    expect(status).toBe(200);
+    expect(body.pruned).toBeGreaterThanOrEqual(0);
+
+    const { body: survivor } = await fetchAPI("/v1/memories/retrieve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actorId: "prune-victim" }),
+    });
+    expect(survivor.some((m: { content: string }) => m.content === "should survive")).toBe(true);
   });
 });
