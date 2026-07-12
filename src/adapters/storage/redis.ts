@@ -51,7 +51,7 @@ export class RedisStorageAdapter implements StorageProvider {
       sourceId: input.sourceId,
       metadata: input.metadata ?? {},
       expiresAt: input.expiresAt,
-      createdAt: now,
+      createdAt: input.createdAt ?? now,
       _touchedAt: now.toISOString(),
     };
 
@@ -79,7 +79,7 @@ export class RedisStorageAdapter implements StorageProvider {
         sourceId: input.sourceId,
         metadata: input.metadata ?? {},
         expiresAt: input.expiresAt,
-        createdAt: now,
+        createdAt: input.createdAt ?? now,
         _touchedAt: now.toISOString(),
       };
 

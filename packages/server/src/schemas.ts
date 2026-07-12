@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const MemoryTypeSchema = z.enum(["interaction", "summary", "observation", "fact", "reflection"]);
 
-const isoDate = z.iso.datetime({ offset: true }).or(z.iso.date()).transform((s) => new Date(s));
+const isoDate = z.string().datetime({ offset: true }).or(z.string().date()).transform((s) => new Date(s));
 
 export const StoreMemorySchema = z.object({
   actorId: z.string().min(1),

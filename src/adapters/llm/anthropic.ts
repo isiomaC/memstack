@@ -74,7 +74,13 @@ export class AnthropicLLMAdapter implements LLMProvider {
       };
     } catch (err) {
       if (err instanceof MemStackError) throw err;
-      throw new MemStackError("LLM_ERROR", `Anthropic request failed: ${err instanceof Error ? err.message : String(err)}`, {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("Cannot find package '@anthropic-ai/sdk'") || msg.includes("Cannot find module '@anthropic-ai/sdk'")) {
+        throw new MemStackError("LLM_ERROR", "Anthropic adapter requires @anthropic-ai/sdk. Install it: npm install @anthropic-ai/sdk", {
+          retryable: false,
+        });
+      }
+      throw new MemStackError("LLM_ERROR", `Anthropic request failed: ${msg}`, {
         retryable: true,
       });
     }

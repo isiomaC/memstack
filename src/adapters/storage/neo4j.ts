@@ -74,11 +74,14 @@ export class Neo4jStorageAdapter implements StorageProvider {
       sourceId: input.sourceId ?? null,
       metadata: JSON.stringify(input.metadata ?? {}),
       expiresAt: input.expiresAt?.toISOString() ?? null,
-      createdAt: now,
+      createdAt: input.createdAt?.toISOString() ?? now,
       embedding: input.embedding ?? null,
     };
 
-    const { createdAt: _, ...updateProps } = props;
+    const updateProps = { ...props };
+    if (!input.createdAt) {
+      delete updateProps.createdAt;
+    }
 
     const session = this.driver.session({ database: this.database });
     try {
@@ -102,7 +105,7 @@ export class Neo4jStorageAdapter implements StorageProvider {
       sourceId: input.sourceId,
       metadata: input.metadata ?? {},
       expiresAt: input.expiresAt,
-      createdAt: new Date(now),
+      createdAt: input.createdAt ?? new Date(now),
     };
   }
 

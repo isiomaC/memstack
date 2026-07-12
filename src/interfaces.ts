@@ -15,6 +15,7 @@ export interface MemoryStoreInput {
   sourceId?: string;
   metadata?: Record<string, unknown>;
   expiresAt?: Date;
+  createdAt?: Date;
   onConflict?: "append";
   /** Pre-assigned ID. When set, the storage adapter uses it instead of generating one. */
   id?: string;
@@ -82,6 +83,7 @@ export interface SummarizeOptions {
 
 export interface PruneStrategy {
   type: "byAge" | "byImportance" | "byCount" | "byType" | "custom" | "compose";
+  actorId?: string;
   maxAge?: number;
   minImportance?: number;
   maxPerActor?: number;

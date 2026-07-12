@@ -43,7 +43,7 @@ export class ChromaStorageAdapter implements StorageProvider {
       sourceId: input.sourceId,
       metadata: input.metadata ?? {},
       expiresAt: input.expiresAt,
-      createdAt: now,
+      createdAt: input.createdAt ?? now,
     };
 
     try {
@@ -81,7 +81,7 @@ export class ChromaStorageAdapter implements StorageProvider {
         sourceId: input.sourceId,
         metadata: input.metadata ?? {},
         expiresAt: input.expiresAt,
-        createdAt: now,
+        createdAt: input.createdAt ?? now,
       };
       memories.push(memory);
       ids.push(memory.id);

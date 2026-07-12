@@ -1,7 +1,7 @@
 {
   "name": "@memstack/server",
   "version": "0.6.4",
-  "description": "REST API server for MemStack \u2014 self-hostable agent memory",
+  "description": "REST API server for MemStack — self-hostable agent memory",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -40,13 +40,14 @@
     "@memstack/config-env": "workspace:*",
     "@memstack/core": "workspace:*",
     "hono": "^4.0.0",
-    "zod": "^4.0.0"
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.7.0",
-    "vitest": "^1.0.0",
-    "@types/node": "^22.0.0"
+    "vitest": "^1.0.0"
   },
   "keywords": [
     "api",

@@ -121,7 +121,7 @@ export class Mem0StorageAdapter implements StorageProvider {
       sourceId: input.sourceId,
       metadata: input.metadata ?? {},
       expiresAt: input.expiresAt,
-      createdAt: new Date(),
+      createdAt: input.createdAt ?? new Date(),
     };
   }
 

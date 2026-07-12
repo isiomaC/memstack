@@ -1,6 +1,6 @@
 # @memstack/cli
 
-CLI for MemStack — shell-based agent memory. Use from bash scripts, Claude Code shell tool, CI pipelines, or any subprocess-capable agent.
+CLI for MemStack — shell-based agent memory. Use from bash scripts, opencode/Claude Code shell tools, CI pipelines, or any subprocess-capable agent.
 
 ## Installation
 
@@ -105,6 +105,18 @@ memstack export --actor "agent-1" --out ./backup.json
 memstack import --actor "agent-1" --file ./backup.json
 # {"imported":1500}
 ```
+
+Each memory's original `createdAt` is preserved on import (round-trips exactly with `export`). Importing a snapshot with zero memories fails cleanly with a non-zero exit.
+
+## Input validation
+
+The CLI normalizes and validates input before storing:
+
+- **`--importance`** is clamped to the `0.0–1.0` range (e.g. `--importance 5` stores as `1`, `--importance=-1` stores as `0`).
+- **`--actor`** is trimmed of leading/trailing whitespace (`--actor "  a  "` and `--actor a` are the same actor).
+- **`--tags`** drops empty entries from trailing/double commas (`--tags "a,,b,"` → `["a","b"]`).
+- **`prune --type`** rejects unknown strategies with a non-zero exit instead of silently doing nothing. Valid: `byAge`, `byImportance`, `byCount`, `byType`, `custom`, `compose`.
+- **`prune --actor`** is scoped to that actor only — it never touches other actors' memories.
 
 ## Shell agent usage
 

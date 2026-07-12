@@ -18,8 +18,18 @@ describe("MCP Streamable HTTP transport", () => {
       stdio: "ignore",
     });
     serverPID = child.pid!;
-    await new Promise((r) => setTimeout(r, 1500));
-  });
+    // Poll until the server accepts connections (robust under parallel-suite
+    // CPU contention where a fixed sleep can lose the startup race).
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      try {
+        await fetch("http://localhost:5702/nonexistent");
+        return;
+      } catch {
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    }
+  }, 20000);
 
   afterAll(() => {
     if (!serverPID) return;

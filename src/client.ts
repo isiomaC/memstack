@@ -159,7 +159,12 @@ export class MemStack {
     if (snapshot.version !== 1) {
       throw validationError(`Unsupported snapshot version: ${snapshot.version}`);
     }
-    await this.memory.storeBatch(snapshot.memories);
+    const memories = snapshot.memories.map((m) => ({
+      ...m,
+      createdAt: typeof m.createdAt === "string" ? new Date(m.createdAt) : m.createdAt,
+      expiresAt: typeof m.expiresAt === "string" ? new Date(m.expiresAt) : m.expiresAt,
+    }));
+    await this.memory.storeBatch(memories);
   }
 
   async health(): Promise<HealthStatus> {

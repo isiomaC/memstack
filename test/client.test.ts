@@ -73,6 +73,25 @@ describe("MemStack", () => {
     expect(restored.map((m) => m.content)).toContain("another memory");
   });
 
+  it("import() preserves createdAt through a JSON round-trip", async () => {
+    const ms = new MemStack({ llm: mockLLM });
+    const original = new Date("2026-01-15T12:00:00.000Z");
+    await ms.memory.store({ actorId: "a", content: "dated memory", createdAt: original });
+
+    // Simulate the README backup workflow: export -> JSON string -> parse -> import.
+    // JSON.parse turns Date fields back into strings, which import() must coerce.
+    const snapshot = JSON.parse(JSON.stringify(await ms.export()));
+    expect(typeof snapshot.memories[0].createdAt).toBe("string");
+
+    const ms2 = new MemStack({ llm: mockLLM });
+    await ms2.import(snapshot);
+
+    const restored = await ms2.memory.retrieve({ actorId: "a" });
+    expect(restored).toHaveLength(1);
+    expect(restored[0].createdAt).toBeInstanceOf(Date);
+    expect(restored[0].createdAt.getTime()).toBe(original.getTime());
+  });
+
   it("dryRunPrune shows what would be removed without deleting", async () => {
     const ms = new MemStack({ llm: mockLLM });
     await ms.process({ actorId: "a", content: "old unimportant", importance: 0.1 });

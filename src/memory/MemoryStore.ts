@@ -310,7 +310,7 @@ export class MemoryStore {
 
   async prune(strategy: PruneStrategy): Promise<{ pruned: string[]; count: number }> {
     await this._ensureInit();
-    const allMemories = await this.storage.retrieve({ limit: this.limits.pruneScan });
+    const allMemories = await this.storage.retrieve({ actorId: strategy.actorId, limit: this.limits.pruneScan });
     const kept = this.pruner.execute(allMemories, strategy);
     const keptIds = new Set(kept.map((k) => k.id));
     const prunedIds = allMemories.filter((m) => !keptIds.has(m.id)).map((m) => m.id);
@@ -323,7 +323,7 @@ export class MemoryStore {
 
   async dryRunPrune(strategy: PruneStrategy): Promise<{ wouldPrune: string[]; count: number }> {
     await this._ensureInit();
-    const allMemories = await this.storage.retrieve({ limit: this.limits.pruneScan });
+    const allMemories = await this.storage.retrieve({ actorId: strategy.actorId, limit: this.limits.pruneScan });
     const kept = this.pruner.execute(allMemories, strategy);
     const keptIds = new Set(kept.map((k) => k.id));
     const wouldPrune = allMemories.filter((m) => !keptIds.has(m.id)).map((m) => m.id);

@@ -46,15 +46,17 @@ async function main() {
     case "store": {
       if (!values.actor) fail("--actor is required");
       if (!values.content) fail("--content is required");
+      const importance = values.importance ? Math.max(0, Math.min(1, Number(values.importance))) : undefined;
       result = await ms.memory.store({
-        actorId: String(values.actor),
+        actorId: String(values.actor).trim(),
         content: String(values.content),
         memoryType: values.type as MemoryType | undefined,
-        importance: values.importance ? Number(values.importance) : undefined,
+        importance,
         tags: values.tags
           ? String(values.tags)
               .split(",")
               .map((t) => t.trim())
+              .filter((t) => t.length > 0)
           : undefined,
       });
       break;
@@ -102,8 +104,14 @@ async function main() {
 
     case "prune": {
       if (!values.actor) fail("--actor is required");
+      const VALID_TYPES = ["byAge", "byImportance", "byCount", "byType", "custom", "compose"];
+      const pruneType = values.type ?? "byAge";
+      if (!VALID_TYPES.includes(String(pruneType))) {
+        fail(`Invalid prune type: ${pruneType}. Valid: ${VALID_TYPES.join(", ")}`);
+      }
       const strategy: PruneStrategy = {
-        type: (values.type as PruneStrategy["type"]) ?? "byAge",
+        type: pruneType as PruneStrategy["type"],
+        actorId: String(values.actor).trim(),
         maxAge: values["max-age"]
           ? parseDuration(String(values["max-age"]))
           : undefined,
@@ -174,8 +182,11 @@ async function main() {
       if (Array.isArray(snapshot)) {
         snapshot = { version: 1 as const, memories: snapshot, exportedAt: new Date().toISOString() };
       }
+      if (!snapshot.memories || !Array.isArray(snapshot.memories) || snapshot.memories.length === 0) {
+        fail("Snapshot contains no memories to import");
+      }
       await ms.import(snapshot);
-      result = { imported: snapshot.memories?.length ?? 0 };
+      result = { imported: snapshot.memories.length };
       break;
     }
 

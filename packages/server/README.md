@@ -7,7 +7,7 @@ REST API server for MemStack — self-hostable agent memory. Runs on Node.js 18+
 ```bash
 npm install @memstack/server
 # or via Docker:
-docker pull ghcr.io/isiomac/memstack-server:v0.6.4
+docker pull ghcr.io/isiomac/memstack-server:0.6.4
 ```
 
 ## Quick Start
@@ -22,7 +22,7 @@ node node_modules/@memstack/server/dist/serve.js
 bun run node_modules/@memstack/server/dist/index.js
 
 # Docker
-docker run -p 3000:3000 -e MEMSTACK_STORAGE=memory -e OPENAI_API_KEY=sk-... ghcr.io/isiomac/memstack-server:v0.6.4
+docker run -p 3000:3000 -e MEMSTACK_STORAGE=memory -e OPENAI_API_KEY=sk-... ghcr.io/isiomac/memstack-server:0.6.4
 ```
 
 Under Node, `dist/serve.js` starts the server explicitly via [`@hono/node-server`](https://github.com/honojs/node-server). Under Bun, `dist/index.js`'s default export (`{ port, fetch }`) is auto-started by the Bun runtime — no extra wiring needed. Both entry points serve the same Hono app, so behavior is identical either way.
@@ -82,8 +82,8 @@ curl -X POST http://localhost:3000/v1/memories \
   -H "Content-Type: application/json" \
   -d '{"actorId":"agent-1","importance":5}'
 # 400 { "error": "Validation failed", "issues": [
-#   { "path": ["content"], "message": "Invalid input: expected string, received undefined" },
-#   { "path": ["importance"], "message": "Too big: expected number to be <=1" }
+#   { "path": ["content"], "message": "Required" },
+#   { "path": ["importance"], "message": "Number must be less than or equal to 1" }
 # ]}
 ```
 
@@ -123,7 +123,7 @@ docker run -p 3000:3000 \
   -e MEMSTACK_STORAGE=postgres \
   -e DATABASE_URL=postgresql://... \
   -e OPENAI_API_KEY=sk-... \
-  ghcr.io/isiomac/memstack-server:v0.6.4
+  ghcr.io/isiomac/memstack-server:0.6.4
 ```
 
 ## License

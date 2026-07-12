@@ -82,7 +82,7 @@ export class UpstashStorageAdapter implements StorageProvider {
       sourceId: input.sourceId,
       metadata: input.metadata ?? {},
       expiresAt: input.expiresAt,
-      createdAt: now,
+      createdAt: input.createdAt ?? now,
     };
 
     if (this.mode === "redis") {
@@ -123,7 +123,7 @@ export class UpstashStorageAdapter implements StorageProvider {
           sourceId: input.sourceId,
           metadata: input.metadata ?? {},
           expiresAt: input.expiresAt,
-          createdAt: now,
+          createdAt: input.createdAt ?? now,
         };
         await this.redis!.set(this._key(id), JSON.stringify(memory));
         await this.redis!.sadd(this._actorKey(memory.actorId), id);
@@ -148,7 +148,7 @@ export class UpstashStorageAdapter implements StorageProvider {
         sourceId: input.sourceId,
         metadata: input.metadata ?? {},
         expiresAt: input.expiresAt,
-        createdAt: now,
+        createdAt: input.createdAt ?? now,
       };
       const meta = this._toVectorMetadata(memory);
       const vector = input.embedding ?? new Array(this.dimensions).fill(0);

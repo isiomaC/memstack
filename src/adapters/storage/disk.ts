@@ -45,7 +45,7 @@ export class DiskStorageAdapter implements StorageProvider {
       sourceId: input.sourceId,
       metadata: input.metadata ?? {},
       expiresAt: input.expiresAt,
-      createdAt: now,
+      createdAt: input.createdAt ?? now,
       _touchedAt: now.toISOString(),
     };
 
@@ -82,7 +82,7 @@ export class DiskStorageAdapter implements StorageProvider {
         sourceId: input.sourceId,
         metadata: input.metadata ?? {},
         expiresAt: input.expiresAt,
-        createdAt: now,
+        createdAt: input.createdAt ?? now,
         _touchedAt: now.toISOString(),
       };
       all.push(memory);
@@ -198,8 +198,11 @@ export class DiskStorageAdapter implements StorageProvider {
         records = records.filter((r) => r.tags?.some((t) => query.tags!.includes(t)));
       }
       if (query.query) {
-        const q = query.query.toLowerCase();
-        records = records.filter((r) => r.content.toLowerCase().includes(q));
+        const terms = query.query.toLowerCase().split(/\s+/).filter(Boolean);
+        records = records.filter((r) => {
+          const content = r.content.toLowerCase();
+          return terms.some((t) => content.includes(t));
+        });
       }
 
       results.push(...records);

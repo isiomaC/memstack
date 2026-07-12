@@ -798,17 +798,27 @@ const ms = new MemStack({
   embedding?: EmbeddingProvider,       // Optional — for semantic search
   storage?: StorageProvider,           // Optional — defaults to InMemoryStorageAdapter
   defaults?: {
-    summarizationThreshold?: number,   // Auto-summarize every N interactions. Default: 100
+    summarizationThreshold?: number,   // Auto-summarize every N process() calls. Default: 100
     embedOnStore?: boolean,            // Auto-embed on store(). Default: true
-    pruneStrategy?: PruneStrategy,     // Auto-prune on every store(). Default: disabled
+    pruneStrategy?: PruneStrategy,     // Auto-prune during process() (throttled). Default: disabled
+    pruneInterval?: number,            // Run auto-prune every N process() calls. Default: 100
+    autoImportance?: boolean,          // LLM-score importance in process() when not provided. Default: false
+    autoTags?: boolean,                // LLM-extract tags in process() when not provided. Default: false
+    summarizationPrompt?: string,      // Custom prompt for the summarizer
   },
   hooks?: {
     onMemoryStored?: (memory: Memory) => void;
     onMemoryPruned?: (ids: string[]) => void;
     onSummaryCreated?: (summary: Memory, deletedCount: number) => void;
+    onError?: (error: Error, context: string) => void;
   },
 });
 ```
+
+> **Auto-behaviors run inside `process()`, not `store()`.** `process()` tracks a
+> per-actor call count: summarization fires every `summarizationThreshold` calls,
+> and pruning fires every `pruneInterval` calls (when `pruneStrategy` is set).
+> `store()` is the low-level write and never triggers these.
 
 ### Memory Subsystem
 
@@ -858,6 +868,8 @@ const data = JSON.parse(fs.readFileSync("state.json", "utf-8"));
 await ms2.import(data);
 ```
 
+Each memory's original `createdAt` is preserved on import, so `export` → `import` is a lossless round-trip — safe for backups and cross-backend migration (e.g. disk → Postgres). All storage adapters honor a `createdAt` supplied on `store()`/`storeBatch()`; when omitted, they default to the current time.
+
 ### Health & Close
 
 ```typescript
@@ -875,14 +887,17 @@ await ms.close(); // graceful shutdown
 const ms = new MemStack({
   llm: new OpenAILLMAdapter({ apiKey: "..." }),
 
-  // Defaults control auto-behavior
+  // Defaults control auto-behavior (all applied during process())
   defaults: {
-    summarizationThreshold: 50,      // Summarize every 50 interactions (default: 100)
+    summarizationThreshold: 50,      // Summarize every 50 process() calls (default: 100)
     embedOnStore: false,             // Don't auto-embed — saves API costs
-    pruneStrategy: {                 // Auto-clean on every store()
+    pruneStrategy: {                 // Auto-clean during process(), throttled by pruneInterval
       type: "byAge",
       maxAge: 90 * 86400000,         // 90 days
     },
+    pruneInterval: 100,              // Run the prune check every 100 process() calls (default: 100)
+    autoImportance: true,            // Let the LLM score importance when you don't pass one
+    autoTags: true,                  // Let the LLM extract tags when you don't pass any
   },
 
   // Hooks for observability
@@ -890,6 +905,7 @@ const ms = new MemStack({
     onMemoryStored: (m) => logger.debug("memory:stored", { id: m.id, actor: m.actorId }),
     onMemoryPruned: (ids) => logger.info("memory:pruned", { count: ids.length }),
     onSummaryCreated: (summary, n) => logger.info("memory:summarized", { count: n }),
+    onError: (err, context) => logger.error("memory:error", { context, message: err.message }),
   },
 });
 ```

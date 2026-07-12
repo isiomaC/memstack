@@ -354,13 +354,37 @@ interface MCPDeleteArgs {
 }
 
 function buildPruneStrategy(args: MCPPruneArgs): PruneStrategy {
+    const VALID_TYPES = ["byAge", "byImportance", "byCount", "byType", "custom", "compose"];
+    const type = args.type ?? "byAge";
+    if (!VALID_TYPES.includes(type)) {
+        throw new Error(`Invalid prune type: ${type}. Valid: ${VALID_TYPES.join(", ")}`);
+    }
     return {
-        type: args.type,
+        type: type as PruneStrategy["type"],
         maxAge: args.maxAge,
         minImportance: args.minImportance,
         maxPerActor: args.maxPerActor,
         memoryTypes: args.memoryTypes as MemoryType[] | undefined,
     };
+}
+
+function sanitizeContent(content: unknown): string {
+    if (typeof content === "string") return content;
+    if (content === null || content === undefined) return "";
+    return String(content);
+}
+
+function sanitizeTags(tags: unknown): string[] | undefined {
+    if (!Array.isArray(tags)) return undefined;
+    const filtered = tags.filter((t): t is string => typeof t === "string" && t.trim().length > 0);
+    return filtered.length > 0 ? filtered : undefined;
+}
+
+function clampImportance(importance: unknown): number | undefined {
+    if (importance === undefined || importance === null) return undefined;
+    const n = Number(importance);
+    if (isNaN(n)) return undefined;
+    return Math.max(0, Math.min(1, n));
 }
 
 export function createServer({
@@ -390,11 +414,13 @@ export function createServer({
             switch (request.params.name) {
                 case "memory_process": {
                     const a = args as unknown as MCPProcessArgs;
+                    const content = sanitizeContent(a.content);
+                    if (!content) throw new Error("content is required and must be a non-empty string");
                     const input: ProcessInput = {
-                        actorId: a.actorId ?? defaultActorId,
-                        content: a.content,
-                        importance: a.importance,
-                        tags: a.tags,
+                        actorId: (a.actorId ?? defaultActorId).trim(),
+                        content,
+                        importance: clampImportance(a.importance),
+                        tags: sanitizeTags(a.tags),
                         memoryType: a.memoryType as MemoryType | undefined,
                         metadata: a.metadata,
                     };
@@ -406,11 +432,13 @@ export function createServer({
 
                 case "memory_store": {
                     const a = args as unknown as MCPStoreArgs;
+                    const content = sanitizeContent(a.content);
+                    if (!content) throw new Error("content is required and must be a non-empty string");
                     const input: MemoryStoreInput = {
-                        actorId: a.actorId ?? defaultActorId,
-                        content: a.content,
-                        importance: a.importance,
-                        tags: a.tags,
+                        actorId: (a.actorId ?? defaultActorId).trim(),
+                        content,
+                        importance: clampImportance(a.importance),
+                        tags: sanitizeTags(a.tags),
                         memoryType: a.memoryType as MemoryType | undefined,
                         metadata: a.metadata,
                     };
@@ -423,10 +451,10 @@ export function createServer({
                 case "memory_store_batch": {
                     const a = args as unknown as MCPStoreBatchArgs;
                     const inputs: MemoryStoreInput[] = a.memories.map((m) => ({
-                        actorId: m.actorId ?? defaultActorId,
-                        content: m.content,
-                        importance: m.importance,
-                        tags: m.tags,
+                        actorId: (m.actorId ?? defaultActorId).trim(),
+                        content: sanitizeContent(m.content),
+                        importance: clampImportance(m.importance),
+                        tags: sanitizeTags(m.tags),
                         memoryType: m.memoryType as MemoryType | undefined,
                         metadata: m.metadata,
                     }));
@@ -556,6 +584,12 @@ export function createServer({
 
                 case "memory_import": {
                     const a = args as unknown as MCPImportArgs;
+                    if (!a.memories || !Array.isArray(a.memories) || a.memories.length === 0) {
+                        return {
+                            content: [{ type: "text" as const, text: JSON.stringify({ imported: 0, message: "No memories to import" }, null, 2) }],
+                            isError: true,
+                        };
+                    }
                     const snapshot: MemStackSnapshot = {
                         version: 1,
                         memories: a.memories,

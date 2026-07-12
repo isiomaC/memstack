@@ -10,7 +10,7 @@ npm install -g @memstack/mcp
 
 ## Quick Start
 
-Add to your MCP client config (~/.claude/mcp.json or .cursor/mcp.json):
+Add to your MCP client config (`~/.config/opencode/`, `~/.claude/mcp.json`, or `.cursor/mcp.json`):
 
 ```json
 {
@@ -125,6 +125,16 @@ The MCP server exposes these tools to the agent:
 | `memory://{actorId}/context` | Compiled LLM context as markdown |
 | `memory://{actorId}/stats` | Actor memory stats as JSON |
 
+## Input handling
+
+Tool arguments are normalized and validated before storage:
+
+- `memory_store` / `memory_process` reject an empty or missing `content` with a tool error instead of creating a blank memory.
+- Non-string `content` is coerced to a string; `importance` is clamped to `0.0–1.0`; empty tags are dropped; `actorId` is trimmed.
+- `memory_import` with an empty `memories` array returns `{ "imported": 0 }` (flagged `isError`) instead of throwing.
+- `memory_import` preserves each memory's original `createdAt`, so it round-trips exactly with `memory_export`.
+- `memory_prune` / `memory_dry_run_prune` reject unknown strategy `type` values with a clear error.
+
 ## Prompts
 
 | Prompt | Description |
@@ -133,7 +143,7 @@ The MCP server exposes these tools to the agent:
 
 ## Transport
 
-By default `memstack-mcp` speaks MCP over **stdio** — the client spawns it as a subprocess (the Quick Start config above). This is the right choice for one agent per process (Claude Code, Claude Desktop, Cursor, etc.).
+By default `memstack-mcp` speaks MCP over **stdio** — the client spawns it as a subprocess (the Quick Start config above). This is the right choice for one agent per process (opencode, Claude Code, Claude Desktop, Cursor, etc.).
 
 For a shared memory server reachable by multiple agents/processes over the network, run it in **Streamable HTTP** mode instead:
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import {
   StoreMemorySchema,
   BatchStoreSchema,
@@ -67,7 +68,7 @@ export function buildOpenApiDocument(version: string): Record<string, unknown> {
         ? {
             requestBody: {
               required: true,
-              content: { "application/json": { schema: z.toJSONSchema(route.requestSchema, { io: "input" }) } },
+              content: { "application/json": { schema: JSON.parse(JSON.stringify(zodToJsonSchema(route.requestSchema))) } },
             },
           }
         : {}),
