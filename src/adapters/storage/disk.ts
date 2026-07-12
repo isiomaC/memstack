@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, readdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile, readdir, open, unlink, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Memory, MemoryType } from "../../types.js";
 import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "../../interfaces.js";
@@ -308,26 +308,82 @@ export class DiskStorageAdapter implements StorageProvider {
   }
 
   private async _writeFile(actorId: string, records: MemoryRecord[]): Promise<void> {
+    const filePath = this._filePath(actorId);
+    // Write-then-rename instead of an in-place write: `rename` is atomic on
+    // POSIX filesystems, so a concurrent reader (get/retrieve, which don't
+    // take the write lock) never observes a partially-written file.
+    const tmpPath = `${filePath}.${process.pid}.${Date.now().toString(36)}.tmp`;
     try {
-      await writeFile(this._filePath(actorId), JSON.stringify(records, null, 2), "utf-8");
+      await writeFile(tmpPath, JSON.stringify(records, null, 2), "utf-8");
+      await rename(tmpPath, filePath);
     } catch (err) {
+      await unlink(tmpPath).catch(() => {});
       throw storageError(`Failed to write memories for actor ${actorId}: ${(err as Error).message}`);
     }
   }
 
   private async _withWriteLock(actorId: string, fn: () => Promise<void>): Promise<void> {
+    // In-process serialization: cheap, and avoids every same-process caller
+    // hitting the cross-process lockfile's retry loop for no reason.
     const prev = this._writeLocks.get(actorId) ?? Promise.resolve();
     let resolve!: () => void;
     const next = new Promise<void>((r) => { resolve = r; });
     this._writeLocks.set(actorId, next);
     await prev;
+    // Cross-process serialization: the in-process chain above only protects
+    // callers sharing this adapter instance. Separate OS processes (e.g. two
+    // `memstack` CLI invocations, or multiple server workers) each have their
+    // own instance and their own copy of `_writeLocks`, so without this an
+    // interleaved read-modify-write across processes silently loses updates.
+    const releaseFileLock = await this._acquireFileLock(actorId);
     try {
       await fn();
     } finally {
+      await releaseFileLock();
       resolve();
       // Clean up: only remove this entry if it hasn't been replaced by a newer lock
       if (this._writeLocks.get(actorId) === next) {
         this._writeLocks.delete(actorId);
+      }
+    }
+  }
+
+  /**
+   * Acquires an exclusive cross-process lock for `actorId` via `open(path, "wx")`
+   * (atomic create-if-absent). Retries with jittered backoff while the lock is
+   * held elsewhere, and steals locks left behind by a crashed process once
+   * they're older than `staleMs`.
+   */
+  private async _acquireFileLock(actorId: string): Promise<() => Promise<void>> {
+    const lockPath = `${this._filePath(actorId)}.lock`;
+    const staleMs = 10_000;
+    const timeoutMs = 30_000;
+    const start = Date.now();
+
+    while (true) {
+      try {
+        const handle = await open(lockPath, "wx");
+        await handle.close();
+        return async () => {
+          await unlink(lockPath).catch(() => {});
+        };
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "EEXIST") {
+          throw storageError(`Failed to acquire lock for actor ${actorId}: ${(err as Error).message}`);
+        }
+        try {
+          const st = await stat(lockPath);
+          if (Date.now() - st.mtimeMs > staleMs) {
+            await unlink(lockPath).catch(() => {});
+            continue;
+          }
+        } catch {
+          continue; // lock file disappeared between EEXIST and stat — retry immediately
+        }
+        if (Date.now() - start > timeoutMs) {
+          throw storageError(`Timed out waiting for disk storage lock: ${lockPath}`);
+        }
+        await new Promise((r) => setTimeout(r, 15 + Math.random() * 35));
       }
     }
   }

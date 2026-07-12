@@ -130,4 +130,24 @@ describe("DiskStorageAdapter", () => {
     expect(deleted).toBe(2);
     expect(await storage.count({ actorId: "a" })).toBe(1);
   });
+
+  it("survives concurrent writes from separate adapter instances without losing memories", async () => {
+    // Regression test: a single instance's in-process write lock does nothing
+    // to protect against separate OS processes (e.g. two `memstack store` CLI
+    // invocations) racing on the same actor's file. Simulate that by using N
+    // independent DiskStorageAdapter instances -- each with its own in-memory
+    // state, pointed at the same directory -- exactly like N separate
+    // processes would be.
+    const instances = Array.from({ length: 10 }, () => new DiskStorageAdapter({ storageDir: TEST_DIR }));
+    await Promise.all(instances.map((inst) => inst.initialize()));
+
+    await Promise.all(
+      instances.map((inst, i) => inst.store({ actorId: "concurrent", content: `memory ${i}` })),
+    );
+
+    const results = await storage.retrieve({ actorId: "concurrent", limit: 100 });
+    expect(results).toHaveLength(10);
+    const contents = results.map((m) => m.content).sort();
+    expect(contents).toEqual(Array.from({ length: 10 }, (_, i) => `memory ${i}`).sort());
+  });
 });
