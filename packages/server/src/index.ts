@@ -33,7 +33,7 @@ async function getMs(): Promise<MemStack> {
 
 type ParsedBody<T> = { ok: true; data: T } | { ok: false; response: Response };
 
-async function parseBody<T>(c: Context, schema: z.ZodType<T>): Promise<ParsedBody<T>> {
+async function parseBody<S extends z.ZodTypeAny>(c: Context, schema: S): Promise<ParsedBody<z.infer<S>>> {
   const raw = await c.req.json().catch(() => undefined);
   const result = schema.safeParse(raw);
   if (!result.success) {
