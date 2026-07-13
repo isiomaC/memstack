@@ -10,7 +10,7 @@ npm install -g @memstack/mcp
 
 ## Quick Start
 
-Add to your MCP client config (~/.claude/mcp.json or .cursor/mcp.json):
+Add to your MCP client config (`~/.config/opencode/`, `~/.claude/mcp.json`, or `.cursor/mcp.json`):
 
 ```json
 {
@@ -101,6 +101,8 @@ The MCP server exposes these tools to the agent:
 |---|---|
 | `memory_process` | Store with auto-enrichment (importance, tags) |
 | `memory_store` | Store a memory |
+| `memory_store_batch` | Store multiple memories in one call (batched embeddings) |
+| `memory_get` | Get a single memory by ID |
 | `memory_retrieve` | Retrieve memories by query, strategy, time range |
 | `memory_compile_context` | Assemble token-budgeted LLM-ready context |
 | `memory_summarize` | Compress old interactions via LLM |
@@ -109,6 +111,10 @@ The MCP server exposes these tools to the agent:
 | `memory_merge` | Merge multiple memories into one |
 | `memory_stats` | Memory diagnostics (counts, types, importance) |
 | `memory_delete` | Delete a single memory |
+| `memory_delete_many` | Delete multiple memories by ID |
+| `memory_touch` | Bump a memory's recency without changing its content |
+| `memory_export` | Export a memory snapshot for backup/migration |
+| `memory_import` | Import memories from a snapshot produced by `memory_export` |
 | `memory_health` | Check storage/LLM/embedding connectivity |
 | `memory_dry_run_prune` | Preview what would be pruned |
 
@@ -119,11 +125,34 @@ The MCP server exposes these tools to the agent:
 | `memory://{actorId}/context` | Compiled LLM context as markdown |
 | `memory://{actorId}/stats` | Actor memory stats as JSON |
 
+## Input handling
+
+Tool arguments are normalized and validated before storage:
+
+- `memory_store` / `memory_process` reject an empty or missing `content` with a tool error instead of creating a blank memory.
+- Non-string `content` is coerced to a string; `importance` is clamped to `0.0–1.0`; empty tags are dropped; `actorId` is trimmed.
+- `memory_import` with an empty `memories` array returns `{ "imported": 0 }` (flagged `isError`) instead of throwing.
+- `memory_import` preserves each memory's original `createdAt`, so it round-trips exactly with `memory_export`.
+- `memory_prune` / `memory_dry_run_prune` reject unknown strategy `type` values with a clear error.
+
 ## Prompts
 
 | Prompt | Description |
 |---|---|
 | `memory_context` | Auto-injected memory context for current actor |
+
+## Transport
+
+By default `memstack-mcp` speaks MCP over **stdio** — the client spawns it as a subprocess (the Quick Start config above). This is the right choice for one agent per process (opencode, Claude Code, Claude Desktop, Cursor, etc.).
+
+For a shared memory server reachable by multiple agents/processes over the network, run it in **Streamable HTTP** mode instead:
+
+```bash
+memstack-mcp --http --port 3939
+# MCP endpoint: http://localhost:3939/mcp
+```
+
+HTTP mode is stateless (`sessionIdGenerator: undefined` per the MCP spec) — each request gets a fresh protocol handshake, but all requests share one underlying MemStack instance, so storage connections aren't reopened per call. Point any Streamable-HTTP-capable MCP client at `http://host:3939/mcp`.
 
 ## Actor persistence
 

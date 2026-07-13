@@ -75,6 +75,24 @@ describe("InMemoryStorageAdapter", () => {
     expect(results[0].content).toBe("The goblin attacked");
   });
 
+  it("retrieves by multi-word query text (OR over terms, not exact phrase)", async () => {
+    const storage = new InMemoryStorageAdapter();
+    await storage.store({ actorId: "a", content: "The goblin attacked the village" });
+    await storage.store({ actorId: "a", content: "A dragon appeared in the sky" });
+    await storage.store({ actorId: "a", content: "Nothing relevant here" });
+
+    const results = await storage.retrieve({
+      actorId: "a",
+      query: "goblin dragon",
+    });
+
+    const contents = results.map((m) => m.content).sort();
+    expect(contents).toEqual([
+      "A dragon appeared in the sky",
+      "The goblin attacked the village",
+    ]);
+  });
+
   it("stores batch", async () => {
     const storage = new InMemoryStorageAdapter();
     const results = await storage.storeBatch([

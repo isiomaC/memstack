@@ -17,8 +17,27 @@ jobs:
         with: { node-version: 22, cache: 'pnpm' }
       - run: pnpm install
       - run: npx tsup src/index.ts --format cjs,esm --dts --clean
+      # `npx vitest run` from repo root discovers every workspace package's
+      # tests too (its default include glob isn't limited to ./test), and
+      # cli/mcp/server's tests import @memstack/config-env, so it needs to be
+      # built here as well or those suites fail to resolve the import.
+      - run: cd packages/config-env && npx tsup src/index.ts --format esm --dts --clean
       - run: npx tsc --noEmit
       - run: npx vitest run
+
+  config-env:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: 'pnpm' }
+      - run: pnpm install
+      - run: npx tsup src/index.ts --format cjs,esm --dts --clean
+      - run: cd packages/config-env && npx tsup src/index.ts --format esm --dts --clean
+      - run: cd packages/config-env && npx tsc --noEmit
+      - run: cd packages/config-env && npx vitest run
 
   mcp:
     runs-on: ubuntu-latest
@@ -30,6 +49,7 @@ jobs:
         with: { node-version: 22, cache: 'pnpm' }
       - run: pnpm install
       - run: npx tsup src/index.ts --format cjs,esm --dts --clean
+      - run: cd packages/config-env && npx tsup src/index.ts --format esm --dts --clean
       - run: cd packages/mcp && npx tsup src/index.ts src/cli.ts --format esm --dts --clean
       - run: cd packages/mcp && npx tsc --noEmit
       - run: cd packages/mcp && npx vitest run
@@ -44,6 +64,7 @@ jobs:
         with: { node-version: 22, cache: 'pnpm' }
       - run: pnpm install
       - run: npx tsup src/index.ts --format cjs,esm --dts --clean
+      - run: cd packages/config-env && npx tsup src/index.ts --format esm --dts --clean
       - run: cd packages/cli && npx tsup src/cli.ts --format esm --clean
       - run: cd packages/cli && npx tsc --noEmit
       - run: cd packages/cli && npx vitest run
@@ -59,6 +80,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: pnpm install
       - run: npx tsup src/index.ts --format cjs,esm --dts --clean
-      - run: cd packages/server && npx tsup src/index.ts --format esm --clean
+      - run: cd packages/config-env && npx tsup src/index.ts --format esm --dts --clean
+      - run: cd packages/server && npx tsup src/index.ts src/serve.ts --format esm --dts --clean
       - run: cd packages/server && npx tsc --noEmit
       - run: cd packages/server && npx vitest run

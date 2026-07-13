@@ -190,7 +190,7 @@ export class PostgresStorageAdapter implements StorageProvider {
       sourceId: input.sourceId,
       metadata: input.metadata ?? {},
       expiresAt: input.expiresAt,
-      createdAt: new Date(now),
+      createdAt: input.createdAt ?? new Date(now),
     };
   }
 

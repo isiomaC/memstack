@@ -1,22 +1,31 @@
 # @memstack/server
 
-REST API server for MemStack — self-hostable agent memory. Run anywhere Bun runs.
+REST API server for MemStack — self-hostable agent memory. Runs on Node.js 18+ or Bun.
 
 ## Installation
 
 ```bash
 npm install @memstack/server
 # or via Docker:
-docker pull ghcr.io/isiomac/memstack-server:v0.5.0
+docker pull ghcr.io/isiomac/memstack-server:0.6.4
 ```
 
 ## Quick Start
 
 ```bash
+# Node.js
+npx @memstack/server
+# or, if installed as a dependency:
+node node_modules/@memstack/server/dist/serve.js
+
+# Bun
 bun run node_modules/@memstack/server/dist/index.js
-# or via Docker:
-docker run -p 3000:3000 -e MEMSTACK_STORAGE=memory -e OPENAI_API_KEY=sk-... ghcr.io/isiomac/memstack-server:v0.5.0
+
+# Docker
+docker run -p 3000:3000 -e MEMSTACK_STORAGE=memory -e OPENAI_API_KEY=sk-... ghcr.io/isiomac/memstack-server:0.6.4
 ```
+
+Under Node, `dist/serve.js` starts the server explicitly via [`@hono/node-server`](https://github.com/honojs/node-server). Under Bun, `dist/index.js`'s default export (`{ port, fetch }`) is auto-started by the Bun runtime — no extra wiring needed. Both entry points serve the same Hono app, so behavior is identical either way.
 
 ## Configuration
 
@@ -62,6 +71,25 @@ All via environment variables.
 | `POST` | `/v1/prune/dry-run` | Preview prune |
 | `GET` | `/v1/stats/:actorId` | Memory diagnostics |
 | `GET` | `/health` | Health check |
+| `GET` | `/openapi.json` | OpenAPI 3.1 spec, generated from the request-validation schemas below |
+
+## Request validation
+
+Every `POST` body is validated against a [zod](https://zod.dev) schema before it reaches MemStack. Invalid requests get a `400` with details instead of a generic `500`:
+
+```bash
+curl -X POST http://localhost:3000/v1/memories \
+  -H "Content-Type: application/json" \
+  -d '{"actorId":"agent-1","importance":5}'
+# 400 { "error": "Validation failed", "issues": [
+#   { "path": ["content"], "message": "Required" },
+#   { "path": ["importance"], "message": "Number must be less than or equal to 1" }
+# ]}
+```
+
+`GET /openapi.json` serves the generated OpenAPI 3.1 document — paste it into [Swagger UI](https://swagger.io/tools/swagger-ui/), [Redoc](https://redocly.com/redoc), or Postman, or run it through an OpenAPI code generator to get a typed client in any language. The request-body schemas in the spec come from the same zod schemas that validate incoming requests, so they can't drift apart.
+
+Note: `POST /v1/prune` and `/v1/prune/dry-run` support every `PruneStrategy` type except `"custom"` — a custom prune strategy is a JavaScript predicate function, which can't be expressed in JSON. Use the `@memstack/core` library directly for custom prune logic.
 
 ## Usage Examples
 
@@ -95,7 +123,7 @@ docker run -p 3000:3000 \
   -e MEMSTACK_STORAGE=postgres \
   -e DATABASE_URL=postgresql://... \
   -e OPENAI_API_KEY=sk-... \
-  ghcr.io/isiomac/memstack-server:v0.5.0
+  ghcr.io/isiomac/memstack-server:0.6.4
 ```
 
 ## License

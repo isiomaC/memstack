@@ -74,6 +74,16 @@ describe("DiskStorageAdapter", () => {
     expect(results[0].content).toBe("The goblin attacked");
   });
 
+  it("retrieves by multi-word query text (OR over terms, not exact phrase)", async () => {
+    await storage.store({ actorId: "a", content: "The goblin attacked the village" });
+    await storage.store({ actorId: "a", content: "A dragon appeared in the sky" });
+    await storage.store({ actorId: "a", content: "Nothing relevant here" });
+
+    const results = await storage.retrieve({ actorId: "a", query: "goblin dragon" });
+    const contents = results.map((m) => m.content).sort();
+    expect(contents).toEqual(["A dragon appeared in the sky", "The goblin attacked the village"]);
+  });
+
   it("stores batch", async () => {
     const results = await storage.storeBatch([
       { actorId: "a", content: "one" },
@@ -119,5 +129,25 @@ describe("DiskStorageAdapter", () => {
     const deleted = await storage.deleteMany([m1.id, m3.id]);
     expect(deleted).toBe(2);
     expect(await storage.count({ actorId: "a" })).toBe(1);
+  });
+
+  it("survives concurrent writes from separate adapter instances without losing memories", async () => {
+    // Regression test: a single instance's in-process write lock does nothing
+    // to protect against separate OS processes (e.g. two `memstack store` CLI
+    // invocations) racing on the same actor's file. Simulate that by using N
+    // independent DiskStorageAdapter instances -- each with its own in-memory
+    // state, pointed at the same directory -- exactly like N separate
+    // processes would be.
+    const instances = Array.from({ length: 10 }, () => new DiskStorageAdapter({ storageDir: TEST_DIR }));
+    await Promise.all(instances.map((inst) => inst.initialize()));
+
+    await Promise.all(
+      instances.map((inst, i) => inst.store({ actorId: "concurrent", content: `memory ${i}` })),
+    );
+
+    const results = await storage.retrieve({ actorId: "concurrent", limit: 100 });
+    expect(results).toHaveLength(10);
+    const contents = results.map((m) => m.content).sort();
+    expect(contents).toEqual(Array.from({ length: 10 }, (_, i) => `memory ${i}`).sort());
   });
 });

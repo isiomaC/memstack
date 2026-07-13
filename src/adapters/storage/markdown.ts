@@ -43,7 +43,7 @@ export class MarkdownStorageAdapter implements StorageProvider {
       sourceId: input.sourceId,
       metadata: input.metadata ?? {},
       expiresAt: input.expiresAt,
-      createdAt: now,
+      createdAt: input.createdAt ?? now,
     };
 
     const filePath = this._filePath(input.actorId);
@@ -134,8 +134,11 @@ export class MarkdownStorageAdapter implements StorageProvider {
       results = results.filter((m) => m.tags?.some((t) => query.tags!.includes(t)));
     }
     if (query.query) {
-      const q = query.query.toLowerCase();
-      results = results.filter((m) => m.content.toLowerCase().includes(q));
+      const terms = query.query.toLowerCase().split(/\s+/).filter(Boolean);
+      results = results.filter((m) => {
+        const content = m.content.toLowerCase();
+        return terms.some((t) => content.includes(t));
+      });
     }
 
     switch (query.strategy) {

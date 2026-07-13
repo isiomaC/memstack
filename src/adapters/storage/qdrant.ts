@@ -65,7 +65,7 @@ export class QdrantStorageAdapter implements StorageProvider {
       sourceId: input.sourceId,
       metadata: input.metadata ?? {},
       expiresAt: input.expiresAt,
-      createdAt: now,
+      createdAt: input.createdAt ?? now,
     };
 
     const qdrantId = crypto.randomUUID();
@@ -101,7 +101,7 @@ export class QdrantStorageAdapter implements StorageProvider {
         sourceId: input.sourceId,
         metadata: input.metadata ?? {},
         expiresAt: input.expiresAt,
-        createdAt: now,
+        createdAt: input.createdAt ?? now,
       };
       results.push(memory);
       const qid = crypto.randomUUID();

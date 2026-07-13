@@ -375,6 +375,35 @@ describe("Pruner (via MemoryStore)", () => {
     expect(importances).toEqual([0.5, 0.7, 0.9]);
   });
 
+  it("scopes prune to strategy.actorId — never deletes another actor's memories", async () => {
+    const storage = new InMemoryStorageAdapter();
+    const store = new MemoryStore({ storage });
+
+    await store.store({ actorId: "alice", content: "alice low importance", importance: 0.1 });
+    await store.store({ actorId: "bob", content: "bob low importance too", importance: 0.1 });
+
+    const result = await store.prune({ type: "byImportance", minImportance: 0.5, actorId: "alice" });
+
+    expect(result.count).toBe(1);
+    const remaining = await store.export();
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].actorId).toBe("bob");
+  });
+
+  it("dryRunPrune scopes to strategy.actorId the same way as prune", async () => {
+    const storage = new InMemoryStorageAdapter();
+    const store = new MemoryStore({ storage });
+
+    await store.store({ actorId: "alice", content: "alice low importance", importance: 0.1 });
+    await store.store({ actorId: "bob", content: "bob low importance too", importance: 0.1 });
+
+    const result = await store.dryRunPrune({ type: "byImportance", minImportance: 0.5, actorId: "alice" });
+
+    expect(result.count).toBe(1);
+    const remaining = await store.export();
+    expect(remaining).toHaveLength(2); // dry run — nothing actually deleted
+  });
+
   it("byImportance: defaults to minImportance 0.5 when not specified", async () => {
     const storage = new InMemoryStorageAdapter();
     const store = new MemoryStore({ storage });

@@ -35,6 +35,7 @@
     "prepublishOnly": "npx tsc --noEmit && npx vitest run"
   },
   "dependencies": {
+    "@memstack/config-env": "workspace:*",
     "@memstack/core": "workspace:*"
   },
   "devDependencies": {

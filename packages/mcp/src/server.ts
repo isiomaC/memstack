@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
     CallToolRequestSchema,
@@ -8,7 +9,9 @@ import {
     GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { MemStack } from "@memstack/core";
-import type { MemStackConfig, PruneStrategy, MemoryType, ProcessInput, MemoryStoreInput, MemoryRetrieveQuery, ContextOptions, SummarizeOptions } from "@memstack/core";
+import type { MemStackConfig, PruneStrategy, MemoryType, Memory, MemStackSnapshot, ProcessInput, MemoryStoreInput, MemoryRetrieveQuery, ContextOptions, SummarizeOptions } from "@memstack/core";
+
+const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as { version: string };
 
 const TOOLS = [
     {
@@ -19,6 +22,7 @@ const TOOLS = [
             type: "object" as const,
             properties: {
                 content: { type: "string", description: "The memory content text" },
+                actorId: { type: "string", description: "Actor ID. Defaults to the current session actor." },
                 importance: { type: "number", description: "Importance score (0.0-1.0). Auto-scored if omitted." },
                 tags: { type: "array", items: { type: "string" }, description: "Tags for categorization. Auto-extracted if omitted." },
                 memoryType: { type: "string", description: "Memory type (interaction, summary, observation, fact, reflection). Default: interaction." },
@@ -42,6 +46,44 @@ const TOOLS = [
                 metadata: { type: "object", description: "Additional metadata key-value pairs" },
             },
             required: ["content"],
+        },
+    },
+    {
+        name: "memory_store_batch",
+        description:
+            "Store multiple memories in one call, directly without enrichment. Embeddings (if configured) are computed in a single batched call for efficiency.",
+        inputSchema: {
+            type: "object" as const,
+            properties: {
+                memories: {
+                    type: "array",
+                    description: "Memories to store (at least 1).",
+                    items: {
+                        type: "object",
+                        properties: {
+                            content: { type: "string", description: "The memory content text" },
+                            actorId: { type: "string", description: "Actor ID. Defaults to the current session actor." },
+                            importance: { type: "number", description: "Importance score 0.0-1.0. Default: 0.5." },
+                            tags: { type: "array", items: { type: "string" }, description: "Tags for categorization" },
+                            memoryType: { type: "string", description: "Memory type (interaction, summary, observation, fact, reflection). Default: interaction." },
+                            metadata: { type: "object", description: "Additional metadata key-value pairs" },
+                        },
+                        required: ["content"],
+                    },
+                },
+            },
+            required: ["memories"],
+        },
+    },
+    {
+        name: "memory_get",
+        description: "Get a single memory by ID. Returns null if not found.",
+        inputSchema: {
+            type: "object" as const,
+            properties: {
+                id: { type: "string", description: "Memory ID" },
+            },
+            required: ["id"],
         },
     },
     {
@@ -95,15 +137,16 @@ const TOOLS = [
     {
         name: "memory_prune",
         description:
-            "Prune (delete) memories matching the given strategy. Returns the pruned memory IDs and count. Handle with care.",
+            "Prune (delete) memories matching the given strategy. Scoped to a single actor — defaults to the current session actor. Returns the pruned memory IDs and count. Handle with care.",
         inputSchema: {
             type: "object" as const,
             properties: {
                 type: {
                     type: "string",
-                    enum: ["byAge", "byImportance", "byCount", "byType", "custom", "compose"],
-                    description: "Prune strategy type",
+                    enum: ["byAge", "byImportance", "byCount", "byType", "compose"],
+                    description: "Prune strategy type. Note: 'custom' is not available via MCP because it requires a JS function.",
                 },
+                actorId: { type: "string", description: "Actor ID to scope pruning to. Defaults to the current session actor." },
                 maxAge: { type: "number", description: "Max age in seconds (for byAge). Memories older than this are removed." },
                 minImportance: { type: "number", description: "Minimum importance (for byImportance). Memories below this are removed." },
                 maxPerActor: { type: "number", description: "Maximum memories per actor (for byCount). Excess memories are removed." },
@@ -153,6 +196,49 @@ const TOOLS = [
         },
     },
     {
+        name: "memory_delete_many",
+        description: "Delete multiple memories by ID in one call. Returns the number actually deleted.",
+        inputSchema: {
+            type: "object" as const,
+            properties: {
+                ids: { type: "array", items: { type: "string" }, description: "Memory IDs to delete" },
+            },
+            required: ["ids"],
+        },
+    },
+    {
+        name: "memory_touch",
+        description: "Bump a memory's recency (last-accessed timestamp) without changing its content, id, or createdAt.",
+        inputSchema: {
+            type: "object" as const,
+            properties: {
+                id: { type: "string", description: "Memory ID to touch" },
+            },
+            required: ["id"],
+        },
+    },
+    {
+        name: "memory_export",
+        description: "Export a snapshot of memories for backup or migration. Returns { version, memories, exportedAt }.",
+        inputSchema: {
+            type: "object" as const,
+            properties: {
+                actorId: { type: "string", description: "Actor ID to export. Defaults to the current session actor." },
+            },
+        },
+    },
+    {
+        name: "memory_import",
+        description: "Import memories from a snapshot previously produced by memory_export. Restores each memory as-is, including its original ID.",
+        inputSchema: {
+            type: "object" as const,
+            properties: {
+                memories: { type: "array", items: { type: "object" }, description: "Memories to import, as produced by memory_export" },
+            },
+            required: ["memories"],
+        },
+    },
+    {
         name: "memory_health",
         description: "Check the health of storage, LLM, and embedding connections.",
         inputSchema: {
@@ -163,15 +249,16 @@ const TOOLS = [
     {
         name: "memory_dry_run_prune",
         description:
-            "Preview what would be pruned by a given strategy WITHOUT actually deleting. Returns the memory IDs that would be removed.",
+            "Preview what would be pruned by a given strategy WITHOUT actually deleting. Scoped to a single actor — defaults to the current session actor. Returns the memory IDs that would be removed.",
         inputSchema: {
             type: "object" as const,
             properties: {
                 type: {
                     type: "string",
-                    enum: ["byAge", "byImportance", "byCount", "byType", "custom", "compose"],
-                    description: "Prune strategy type to preview",
+                    enum: ["byAge", "byImportance", "byCount", "byType", "compose"],
+                    description: "Prune strategy type to preview. Note: 'custom' is not available via MCP because it requires a JS function.",
                 },
+                actorId: { type: "string", description: "Actor ID to scope pruning to. Defaults to the current session actor." },
                 maxAge: { type: "number", description: "Max age in seconds (for byAge)" },
                 minImportance: { type: "number", description: "Minimum importance (for byImportance)" },
                 maxPerActor: { type: "number", description: "Maximum memories per actor (for byCount)" },
@@ -200,6 +287,30 @@ interface MCPStoreArgs {
     metadata?: Record<string, unknown>;
 }
 
+interface MCPStoreBatchArgs {
+    memories: MCPStoreArgs[];
+}
+
+interface MCPGetArgs {
+    id: string;
+}
+
+interface MCPDeleteManyArgs {
+    ids: string[];
+}
+
+interface MCPTouchArgs {
+    id: string;
+}
+
+interface MCPExportArgs {
+    actorId?: string;
+}
+
+interface MCPImportArgs {
+    memories: Memory[];
+}
+
 interface MCPRetrieveArgs {
     actorId?: string;
     query?: string;
@@ -225,7 +336,8 @@ interface MCPSummarizeArgs {
 }
 
 interface MCPPruneArgs {
-    type: "byAge" | "byImportance" | "byCount" | "byType" | "custom" | "compose";
+    type: "byAge" | "byImportance" | "byCount" | "byType" | "compose";
+    actorId?: string;
     maxAge?: number;
     minImportance?: number;
     maxPerActor?: number;
@@ -244,9 +356,15 @@ interface MCPDeleteArgs {
     id: string;
 }
 
-function buildPruneStrategy(args: MCPPruneArgs): PruneStrategy {
+function buildPruneStrategy(args: MCPPruneArgs, defaultActorId: string): PruneStrategy {
+    const VALID_TYPES = ["byAge", "byImportance", "byCount", "byType", "custom", "compose"];
+    const type = args.type ?? "byAge";
+    if (!VALID_TYPES.includes(type)) {
+        throw new Error(`Invalid prune type: ${type}. Valid: ${VALID_TYPES.join(", ")}`);
+    }
     return {
-        type: args.type,
+        type: type as PruneStrategy["type"],
+        actorId: (args.actorId ?? defaultActorId).trim(),
         maxAge: args.maxAge,
         minImportance: args.minImportance,
         maxPerActor: args.maxPerActor,
@@ -254,10 +372,38 @@ function buildPruneStrategy(args: MCPPruneArgs): PruneStrategy {
     };
 }
 
-export function createServer({ config, defaultActorId }: { config: MemStackConfig; defaultActorId: string }): Server {
-    const ms = new MemStack(config);
+function sanitizeContent(content: unknown): string {
+    if (typeof content === "string") return content;
+    if (content === null || content === undefined) return "";
+    return String(content);
+}
+
+function sanitizeTags(tags: unknown): string[] | undefined {
+    if (!Array.isArray(tags)) return undefined;
+    const filtered = tags.filter((t): t is string => typeof t === "string" && t.trim().length > 0);
+    return filtered.length > 0 ? filtered : undefined;
+}
+
+function clampImportance(importance: unknown): number | undefined {
+    if (importance === undefined || importance === null) return undefined;
+    const n = Number(importance);
+    if (isNaN(n)) return undefined;
+    return Math.max(0, Math.min(1, n));
+}
+
+export function createServer({
+    config,
+    defaultActorId,
+    ms: providedMs,
+}: {
+    config: MemStackConfig;
+    defaultActorId: string;
+    /** Reuse an existing MemStack instance instead of constructing one from config. Used by HTTP mode to avoid reconnecting storage per request. */
+    ms?: MemStack;
+}): Server {
+    const ms = providedMs ?? new MemStack(config);
     const server = new Server(
-        { name: "memstack", version: "0.1.0" },
+        { name: "memstack", version: pkg.version },
         { capabilities: { tools: {}, resources: {}, prompts: {} } },
     );
 
@@ -272,11 +418,13 @@ export function createServer({ config, defaultActorId }: { config: MemStackConfi
             switch (request.params.name) {
                 case "memory_process": {
                     const a = args as unknown as MCPProcessArgs;
+                    const content = sanitizeContent(a.content);
+                    if (!content) throw new Error("content is required and must be a non-empty string");
                     const input: ProcessInput = {
-                        actorId: a.actorId ?? defaultActorId,
-                        content: a.content,
-                        importance: a.importance,
-                        tags: a.tags,
+                        actorId: (a.actorId ?? defaultActorId).trim(),
+                        content,
+                        importance: clampImportance(a.importance),
+                        tags: sanitizeTags(a.tags),
                         memoryType: a.memoryType as MemoryType | undefined,
                         metadata: a.metadata,
                     };
@@ -288,15 +436,41 @@ export function createServer({ config, defaultActorId }: { config: MemStackConfi
 
                 case "memory_store": {
                     const a = args as unknown as MCPStoreArgs;
+                    const content = sanitizeContent(a.content);
+                    if (!content) throw new Error("content is required and must be a non-empty string");
                     const input: MemoryStoreInput = {
-                        actorId: a.actorId ?? defaultActorId,
-                        content: a.content,
-                        importance: a.importance,
-                        tags: a.tags,
+                        actorId: (a.actorId ?? defaultActorId).trim(),
+                        content,
+                        importance: clampImportance(a.importance),
+                        tags: sanitizeTags(a.tags),
                         memoryType: a.memoryType as MemoryType | undefined,
                         metadata: a.metadata,
                     };
                     const result = await ms.memory.store(input);
+                    return {
+                        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+                    };
+                }
+
+                case "memory_store_batch": {
+                    const a = args as unknown as MCPStoreBatchArgs;
+                    const inputs: MemoryStoreInput[] = a.memories.map((m) => ({
+                        actorId: (m.actorId ?? defaultActorId).trim(),
+                        content: sanitizeContent(m.content),
+                        importance: clampImportance(m.importance),
+                        tags: sanitizeTags(m.tags),
+                        memoryType: m.memoryType as MemoryType | undefined,
+                        metadata: m.metadata,
+                    }));
+                    const result = await ms.memory.storeBatch(inputs);
+                    return {
+                        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+                    };
+                }
+
+                case "memory_get": {
+                    const a = args as unknown as MCPGetArgs;
+                    const result = await ms.memory.get(a.id);
                     return {
                         content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
                     };
@@ -348,7 +522,7 @@ export function createServer({ config, defaultActorId }: { config: MemStackConfi
                 }
 
                 case "memory_prune": {
-                    const strategy = buildPruneStrategy(args as unknown as MCPPruneArgs);
+                    const strategy = buildPruneStrategy(args as unknown as MCPPruneArgs, defaultActorId);
                     const result = await ms.memory.prune(strategy);
                     return {
                         content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
@@ -388,6 +562,49 @@ export function createServer({ config, defaultActorId }: { config: MemStackConfi
                     };
                 }
 
+                case "memory_delete_many": {
+                    const a = args as unknown as MCPDeleteManyArgs;
+                    const count = await ms.memory.deleteMany(a.ids);
+                    return {
+                        content: [{ type: "text" as const, text: JSON.stringify({ deleted: count }, null, 2) }],
+                    };
+                }
+
+                case "memory_touch": {
+                    const a = args as unknown as MCPTouchArgs;
+                    await ms.memory.touch(a.id);
+                    return {
+                        content: [{ type: "text" as const, text: JSON.stringify({ touched: true }, null, 2) }],
+                    };
+                }
+
+                case "memory_export": {
+                    const a = args as unknown as MCPExportArgs;
+                    const result = await ms.export(a.actorId ?? defaultActorId);
+                    return {
+                        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+                    };
+                }
+
+                case "memory_import": {
+                    const a = args as unknown as MCPImportArgs;
+                    if (!a.memories || !Array.isArray(a.memories) || a.memories.length === 0) {
+                        return {
+                            content: [{ type: "text" as const, text: JSON.stringify({ imported: 0, message: "No memories to import" }, null, 2) }],
+                            isError: true,
+                        };
+                    }
+                    const snapshot: MemStackSnapshot = {
+                        version: 1,
+                        memories: a.memories,
+                        exportedAt: new Date().toISOString(),
+                    };
+                    await ms.import(snapshot);
+                    return {
+                        content: [{ type: "text" as const, text: JSON.stringify({ imported: a.memories.length }, null, 2) }],
+                    };
+                }
+
                 case "memory_health": {
                     const result = await ms.health();
                     return {
@@ -396,7 +613,7 @@ export function createServer({ config, defaultActorId }: { config: MemStackConfi
                 }
 
                 case "memory_dry_run_prune": {
-                    const strategy = buildPruneStrategy(args as unknown as MCPPruneArgs);
+                    const strategy = buildPruneStrategy(args as unknown as MCPPruneArgs, defaultActorId);
                     const result = await ms.memory.dryRunPrune(strategy);
                     return {
                         content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],

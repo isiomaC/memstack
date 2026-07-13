@@ -155,12 +155,13 @@ export class OpenAILLMAdapter implements LLMProvider {
             };
 
             const content = parsed.choices?.[0]?.delta?.content ?? "";
-            if (parsed.usage) {
-              promptTokens = parsed.usage.prompt_tokens;
-              completionTokens = parsed.usage.completion_tokens;
+            const usage = parsed.usage;
+            if (usage) {
+              promptTokens = usage.prompt_tokens;
+              completionTokens = usage.completion_tokens;
             }
 
-            if (content) {
+            if (content || usage) {
               yield {
                 text: content,
                 tokens: { prompt: promptTokens, completion: completionTokens, total: promptTokens + completionTokens },

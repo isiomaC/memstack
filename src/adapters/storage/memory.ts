@@ -29,7 +29,7 @@ export class InMemoryStorageAdapter implements StorageProvider {
       sourceId: input.sourceId,
       metadata: input.metadata ?? {},
       expiresAt: input.expiresAt,
-      createdAt: now,
+      createdAt: input.createdAt ?? now,
       _touchedAt: now,
     };
     this.memories.set(memory.id, memory);
@@ -87,8 +87,11 @@ export class InMemoryStorageAdapter implements StorageProvider {
       results = results.filter((m) => m.tags?.some((t) => query.tags!.includes(t)));
     }
     if (query.query) {
-      const q = query.query.toLowerCase();
-      results = results.filter((m) => m.content.toLowerCase().includes(q));
+      const terms = query.query.toLowerCase().split(/\s+/).filter(Boolean);
+      results = results.filter((m) => {
+        const content = m.content.toLowerCase();
+        return terms.some((t) => content.includes(t));
+      });
     }
     if (query.createdAfter) {
       results = results.filter((m) => m.createdAt >= query.createdAfter!);

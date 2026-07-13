@@ -167,7 +167,7 @@ export class GroqLLMAdapter implements LLMProvider {
               completionTokens = usage.completion_tokens;
             }
 
-            if (content) {
+            if (content || usage) {
               yield {
                 text: content,
                 tokens: { prompt: promptTokens, completion: completionTokens, total: promptTokens + completionTokens },

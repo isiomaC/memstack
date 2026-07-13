@@ -83,7 +83,7 @@ export class MongoDBStorageAdapter implements StorageProvider {
       sourceId: input.sourceId,
       metadata: input.metadata ?? {},
       expiresAt: input.expiresAt,
-      createdAt: now,
+      createdAt: input.createdAt ?? now,
     };
     await this.collection.insertOne(this.toDoc(memory) as unknown as Record<string, unknown>);
     return memory;

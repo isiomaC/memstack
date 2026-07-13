@@ -159,7 +159,19 @@ export class MemStack {
     if (snapshot.version !== 1) {
       throw validationError(`Unsupported snapshot version: ${snapshot.version}`);
     }
-    await this.memory.storeBatch(snapshot.memories);
+    const memories = snapshot.memories.map((m, i) => {
+      const createdAt = typeof m.createdAt === "string" ? new Date(m.createdAt) : m.createdAt;
+      const expiresAt = typeof m.expiresAt === "string" ? new Date(m.expiresAt) : m.expiresAt;
+      const label = m.id ? `id: ${m.id}` : `index ${i}`;
+      if (createdAt && isNaN(createdAt.getTime())) {
+        throw validationError(`Invalid createdAt for memory (${label}): ${String(m.createdAt)}`);
+      }
+      if (expiresAt && isNaN(expiresAt.getTime())) {
+        throw validationError(`Invalid expiresAt for memory (${label}): ${String(m.expiresAt)}`);
+      }
+      return { ...m, createdAt, expiresAt };
+    });
+    await this.memory.storeBatch(memories);
   }
 
   async health(): Promise<HealthStatus> {
