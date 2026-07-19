@@ -1,6 +1,6 @@
 {
   "name": "@memstack/cli",
-  "version": "0.6.4",
+  "version": "0.7.0",
   "description": "CLI for MemStack \u2014 shell-based agent memory",
   "type": "module",
   "main": "dist/cli.js",
