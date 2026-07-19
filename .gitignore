@@ -5,5 +5,5 @@ dist/
 .DS_Store
 coverage/
 .superpowers/
-docs/
+docs/internal/
 docs/qa/
