@@ -1,5 +1,87 @@
 # Changelog
 
+## v0.7.0
+
+### @memstack/core
+
+#### New features
+- `createdAt?: Date` added to `MemoryStoreInput` — all 18 storage adapters now
+  honor a caller-supplied `createdAt`. When omitted, adapters default to the
+  current time. `MemStack.import()` coerces string dates so `export` → `import`
+  is a lossless round-trip (safe for backups and cross-backend migration).
+- `actorId?: string` added to `PruneStrategy` — prune/dryRunPrune now scope
+  their memory scan to the given actor instead of scanning all actors. Fixes a
+  bug where pruning one actor would delete another actor's memories.
+- Keyword retrieval now tokenizes multi-word queries (OR over terms) in the
+  built-in adapters (InMemory, Disk, Markdown). Previously a whole-phrase
+  substring match, which made queries like `"login error"` return zero results
+  for content like "login failing with error...".
+
+#### Bug fixes
+- `MemStack.import()` coerces string `createdAt` and `expiresAt` to `Date` so
+  the core, server, and MCP import paths all produce valid `Memory` objects.
+- AnthropicLLMAdapter now throws an actionable, non-retryable error when
+  `@anthropic-ai/sdk` is not installed (was: raw `ERR_MODULE_NOT_FOUND`).
+
+#### Infrastructure
+- Changed `zod` from `^4.0.0` to `^3.23.8` (v4 has no stable release on npm).
+  Server OpenAPI generation now uses `zod-to-json-schema`.
+
+### @memstack/cli
+
+#### Behaviour changes
+- `--importance` is clamped to 0.0–1.0 (out-of-range values were silently
+  accepted before).
+- `--actor` is trimmed of leading/trailing whitespace.
+- `--tags` drops empty entries from trailing/double commas.
+- `prune --type` rejects unknown strategy names with a non-zero exit instead of
+  silently doing nothing.
+- `import` rejects empty snapshots with a clean error; `createdAt` is preserved
+  on imported memories.
+
+### @memstack/mcp
+
+#### Validation hardening
+- `memory_store` / `memory_process` reject empty or missing `content` with a
+  tool error (was: silently created a garbage memory with `actorId: "default"`).
+- Non-string `content` is coerced to a string; `importance` is clamped to
+  0.0–1.0; empty tags are dropped; `actorId` is trimmed.
+- `memory_import` guards against empty or missing `memories` arrays (was: raw
+  `TypeError` crash).
+- `memory_prune` / `memory_dry_run_prune` reject unknown strategy `type` values
+  with a clear error (was: silently returned zero results).
+
+#### Tests
+- HTTP transport test replaced a fixed 1500 ms sleep with a readiness poll
+  (flaky `ECONNREFUSED` under parallel suite runs).
+
+### @memstack/server
+
+#### Fixes
+- `parseBody` made generic (`S extends z.ZodTypeAny`) to satisfy zod v3's
+  stricter `.transform()` input/output variance typing. Fixes the server DTS
+  build in CI.
+- Docker tag corrected from `:v0.6.4` to `:0.6.4` in README (published tag has
+  no `v` prefix).
+
+### Docs
+- Corrected auto-summarize/prune semantics in README (they run inside
+  `process()`, not `store()`; prune is throttled by `pruneInterval`).
+- Documented previously-undocumented config options: `pruneInterval`,
+  `autoImportance`, `autoTags`, `summarizationPrompt`, `onError` hook.
+- Internal docs moved to `docs/internal/` (gitignored). `docs/` now tracked
+  only for user-facing documents (`MCP_SETUP.md`).
+- Added comprehensive manual QA runbook (`docs/internal/e2e-plan.md`),
+  run once live (473 unit tests, 66 docker-backed e2e tests, all surfaces
+  green). QA artifacts at `docs/qa/`.
+
+### CI
+- Publish workflow now builds `config-env` before `pnpm publish -r` (CLI/MCP/
+  server prepublishOnly tests require the built module).
+- Disk storage concurrency fixed with cross-process file locking.
+
+---
+
 ## v0.4.0
 
 ### @memstack/core

@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, registry-url: 'https://registry.npmjs.org' }
       - run: pnpm install
+      - run: npx tsup src/index.ts --format cjs,esm --dts --clean
+      - run: cd packages/config-env && npx tsup src/index.ts --format esm --dts --clean
       - run: pnpm publish -r --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
