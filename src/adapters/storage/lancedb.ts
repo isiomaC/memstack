@@ -10,7 +10,7 @@ type LanceDBConnection = {
 
 type LanceDBTable = {
   add(data: { id: string; vector: number[]; actor_id: string; memory_type: string; content: string; importance: number; emotional_valence: number; tags: string; source_id: string; metadata: string; expires_at: string; created_at: string }[]): Promise<void>;
-  search(vector: number[]): { limit(n: number): { where(predicate: string): { execute(): Promise<{ id: string; _distance: number; vector: number[]; actor_id: string; memory_type: string; content: string; importance: number; emotional_valence: number; tags: string; source_id: string; metadata: string; expires_at: string; created_at: string }[]> } } };
+  search(vector: number[]): { limit(n: number): { where(predicate: string): { execute(): Promise<LanceDBMemoryRow[]>; prefilter(value: boolean): { execute(): Promise<LanceDBMemoryRow[]> } } } };
   delete(predicate: string): Promise<void>;
   countRows(predicate?: string): Promise<number>;
 };
@@ -110,7 +110,7 @@ export class LanceDBStorageAdapter implements StorageProvider {
   }
 
   async get(id: string): Promise<Memory | null> {
-    const results = await this.table.search(this._zeroVector).limit(1).where(`id = "${id}"`).execute();
+    const results = await this.table.search(this._zeroVector).limit(1).where(`id = "${id}"`).prefilter(true).execute();
     if (results.length === 0) return null;
 
     const row = results[0];
