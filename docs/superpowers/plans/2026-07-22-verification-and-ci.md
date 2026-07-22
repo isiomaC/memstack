@@ -89,14 +89,14 @@ git commit -m "test: convert SQLite E2E to Vitest"
 
 **Files:**
 - Modify: `e2e/chroma.e2e.ts`
-- Modify: `package.json`
-- Modify: `pnpm-lock.yaml`
 
-- [ ] **Step 1: Add the Chroma default embedder needed by the installed client**
+- [ ] **Step 1: Preserve the zero-runtime-dependency boundary**
 
-Run: `pnpm add -D @chroma-core/default-embed`
+Do not add `@chroma-core/default-embed`. The Chroma E2E suite must use the already-installed client when its default embedding capability is available and otherwise report a precise visible skip.
 
-Expected: `package.json` and `pnpm-lock.yaml` add a pinned compatible dependency.
+Run: `git diff --exit-code -- package.json pnpm-lock.yaml`
+
+Expected: no dependency or lockfile changes.
 
 - [ ] **Step 2: Add distinct capability probes**
 
@@ -106,7 +106,7 @@ type ChromaCapability =
   | { available: false; reason: "chromadb client unavailable" | "default embedding function unavailable" };
 ```
 
-Import `chromadb` and `@chroma-core/default-embed` separately. Only `ERR_MODULE_NOT_FOUND` selects a skipped suite; connection and collection errors remain failures.
+Import `chromadb` first. Probe collection creation separately so a missing client reports `Chroma client unavailable` and the client's missing optional default embedder reports `default embedding function unavailable`. Connection and unrelated collection errors remain failures.
 
 - [ ] **Step 3: Express the former script checks as isolated Vitest assertions**
 
@@ -129,7 +129,7 @@ Run: `pnpm check && pnpm test`
 Expected: zero type errors and all unit tests pass.
 
 ```bash
-git add e2e/chroma.e2e.ts package.json pnpm-lock.yaml
+git add e2e/chroma.e2e.ts
 git commit -m "test: convert Chroma E2E to Vitest"
 ```
 
