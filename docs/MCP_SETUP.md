@@ -1,6 +1,6 @@
 # MCP Setup Guide
 
-`@memstack/mcp` is an [MCP](https://modelcontextprotocol.io) **server** — a small process that speaks the Model Context Protocol over stdio. Any MCP-compatible client (an agent, IDE, or CLI) can spawn it as a subprocess and get 12 memory tools (`memory_store`, `memory_retrieve`, `memory_summarize`, `memory_prune`, etc.), 2 resources, and 1 prompt for free. See [`packages/mcp/README.md`](packages/mcp/README.md) for the full tool/resource/prompt reference and storage-backend options.
+`@memstack/mcp` is an [MCP](https://modelcontextprotocol.io) **server** — a small process that speaks the Model Context Protocol over stdio. Any MCP-compatible client (an agent, IDE, or CLI) can spawn it as a subprocess and get 18 memory tools (`memory_store`, `memory_retrieve`, `memory_summarize`, `memory_prune`, etc.), 2 resources, and 1 prompt for free. See [`packages/mcp/README.md`](packages/mcp/README.md) for the full tool/resource/prompt reference and storage-backend options.
 
 This doc collects copy-pasteable config for as many MCP clients as we could verify, plus a generic recipe for anything not listed. If you hit the same setup questions we did, they should be answered here — and if your client isn't listed, the [Universal Pattern](#universal-pattern-any-mcp-client) section covers ~90% of clients since most just wrap the same `command` / `args` / `env` shape.
 
@@ -50,7 +50,7 @@ npx -y @modelcontextprotocol/inspector npx -y @memstack/mcp
 ```
 
 Set env vars first (`export OPENAI_API_KEY=sk-...` or pass them via the Inspector UI). This opens a local web UI where you can:
-- Call `tools/list` to confirm all 12 tools appear
+- Call `tools/list` to confirm all 18 tools appear
 - Invoke `memory_store` / `memory_retrieve` directly and see raw JSON responses
 - Read the `memory://{actorId}/context` and `memory://{actorId}/stats` resources
 - Call `memory_health` to check storage/LLM/embedding connectivity independently

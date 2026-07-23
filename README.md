@@ -673,9 +673,16 @@ new OpenAIEmbeddingAdapter({ apiKey: "...", baseURL: "https://api.voyageai.com/v
 
 ### Storage Adapters
 
-MemStack ships with **12 production-ready storage adapters (6 experimental)** — every major backend, zero peer dependencies, all client-injected.
+MemStack contains 18 storage-adapter implementations. Twelve are exported from `@memstack/core`; six remain experimental source implementations. Core has no runtime dependencies, and database clients are injected by callers.
 
-### Production (e2e verified against real instances)
+**Support levels:**
+
+- **Production-ready** means exported from the public package, covered by unit tests, and supported as part of the public API.
+- **Real-service E2E verified** means the adapter also passes against its actual database implementation in `pnpm test:e2e`.
+- **Mock-tested** means unit coverage uses an injected fake client rather than a live cloud service.
+- **Experimental** means implemented in source but not exported from the published package.
+
+### Public package exports
 
 **Built-in (zero external deps):**
 | Adapter | Backend | Use case |
@@ -709,9 +716,9 @@ MemStack ships with **12 production-ready storage adapters (6 experimental)** �
 |---|---|
 | `Neo4jStorageAdapter` | Neo4j |
 
-### Experimental (mock-tested, blocked by cloud deps or platform constraints)
+### Experimental (mock-tested or missing an optional E2E capability)
 
-Available via direct source import. Not yet in the barrel export — uncomment in `src/index.ts` when e2e verified.
+These implementations are available to source contributors but are not part of the published package API.
 
 | Adapter | Backend | Blocker |
 |---|---|---|
@@ -722,7 +729,7 @@ Available via direct source import. Not yet in the barrel export — uncomment i
 | `Mem0StorageAdapter` | Mem0 OSS or Cloud | Cloud-only (needs API key) |
 | `ZepStorageAdapter` | Zep Cloud or CE | Cloud-only (needs API key) |
 
-> **Direct import:** `import { ChromaStorageAdapter } from "@memstack/core/src/adapters/storage/chroma.js"`
+Live cloud compatibility remains unverified for Pinecone, Upstash, Mem0, Zep, and Turso. Chroma's real-client E2E suite is skipped when its optional default embedding function is unavailable. LLM and embedding-provider tests use mocks; live-provider testing is opt-in and is not part of CI.
 
 **Quick-start per backend:**
 
@@ -965,12 +972,20 @@ git clone https://github.com/isiomaC/memstack.git
 cd memstack
 pnpm install
 
-pnpm test           # 393 tests, no external services needed
-pnpm test:e2e        # 82 E2E tests (requires Docker)
-pnpm test:watch     # Watch mode
-pnpm build          # CJS + ESM + type declarations
-pnpm check          # TypeScript type-check only
+pnpm test             # 407 core tests, no external services needed
+pnpm test:packages    # 78 package tests after dependency-ordered builds
+pnpm test:e2e         # 80 pass, 1 optional Chroma skip (requires Docker services)
+pnpm test:e2e:run     # Start services, run E2E once, preserve failure logs, clean up
+pnpm smoke:artifacts  # Built core, CLI, MCP, and server black-box checks
+pnpm smoke:packages   # Pack and install publishable tarballs in a clean project
+pnpm smoke:docker     # Build and exercise the server image
+pnpm verify           # Complete local verification pipeline
+pnpm test:watch       # Watch core tests
+pnpm build:all        # Build core and all workspace packages
+pnpm check:all        # Type-check core and all workspace packages
 ```
+
+CI exposes a stable `verification` job. Configure that job as a required status check in GitHub branch protection for `main`.
 
 ### Debugging
 
