@@ -29,8 +29,8 @@
     "smoke:artifacts": "bash scripts/verification/smoke-artifacts.sh",
     "smoke:packages": "bash scripts/verification/smoke-packages.sh",
     "smoke:docker": "bash scripts/verification/smoke-docker.sh",
-    "verify": "pnpm check:all && pnpm test:unit && pnpm test:packages && pnpm build:all && pnpm test:e2e && pnpm smoke:artifacts && pnpm smoke:packages && pnpm smoke:docker",
-    "prepublishOnly": "npx tsup src/index.ts --format cjs,esm --dts --clean && npx tsc --noEmit && npx vitest run",
+    "verify": "pnpm check:all && pnpm test:unit && pnpm test:packages && pnpm build:all && pnpm test:e2e:run && pnpm smoke:artifacts && pnpm smoke:packages && pnpm smoke:docker",
+    "prepublishOnly": "pnpm exec tsup src/index.ts --format cjs,esm --dts --clean && pnpm exec tsc --noEmit && pnpm exec vitest run",
     "publish:all": "pnpm publish -r --access public"
   },
   "keywords": [

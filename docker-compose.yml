@@ -8,7 +8,7 @@ version: "3.8"
 services:
   # PostgreSQL 17 with pgvector extension for vector similarity search
   postgres:
-    image: pgvector/pgvector:pg17
+    image: pgvector/pgvector@sha256:be400b50812ab2cc908ed78593fda2e51e3b45fe774fa637f1c7b16e68531d95
     environment:
       POSTGRES_USER: memstack
       POSTGRES_PASSWORD: memstack
@@ -44,7 +44,7 @@ services:
 
   # Neo4j 5 graph database with APOC plugin for graph storage
   neo4j:
-    image: neo4j:5
+    image: neo4j@sha256:937fbd163e302a5751dd329b719c1b05e2a4293af223d61b1aa17e3dea087709
     environment:
       NEO4J_AUTH: neo4j/memstack123
       NEO4J_PLUGINS: '["apoc"]'
@@ -58,7 +58,8 @@ services:
       test: ["CMD-SHELL", "cypher-shell -u neo4j -p memstack123 'RETURN 1'"]
       interval: 10s
       timeout: 10s
-      retries: 10
+      retries: 30
+      start_period: 30s
 
   # Qdrant vector database for high-performance similarity search
   qdrant:
@@ -100,7 +101,7 @@ services:
       retries: 5
 
   mongodb:
-    image: mongo:7
+    image: mongo@sha256:8ecb514b00bdcc0bde67ef4e6c330385377a9dc68e24ee94e28c07c891647348
     ports:
       - "27017:27017"
     environment:

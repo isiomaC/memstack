@@ -64,7 +64,7 @@ describe("memstack CLI commands", () => {
   let env: NodeJS.ProcessEnv;
 
   beforeAll(async () => {
-    execFileSync("npx", ["tsup", "src/cli.ts", "--format", "esm", "--clean"], {
+    execFileSync("pnpm", ["exec", "tsup", "src/cli.ts", "--format", "esm", "--clean"], {
       cwd: PKG_ROOT,
       stdio: "inherit",
     });

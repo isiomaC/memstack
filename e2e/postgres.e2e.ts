@@ -216,7 +216,7 @@ describe("PostgresStorageAdapter E2E", () => {
   });
 
   it("11. expired memory — store with expiresAt in past, verify get returns null, count excludes it", async () => {
-    const past = new Date(Date.now() - 60_000);
+    const past = new Date(0);
     const mem = await adapter.store({
       actorId: "pg-expired",
       content: "expired content",

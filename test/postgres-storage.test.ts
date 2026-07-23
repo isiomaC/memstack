@@ -174,8 +174,9 @@ describe("PostgresStorageAdapter", () => {
 
   it("filters expired memories", async () => {
     const past = new Date(Date.now() - 10000);
-    await storage.store({ actorId: "a", content: "expired", expiresAt: past });
+    const expired = await storage.store({ actorId: "a", content: "expired", expiresAt: past });
     await storage.store({ actorId: "a", content: "valid" });
+    expect(await storage.get(expired.id)).toBeNull();
     expect(await storage.count({ actorId: "a" })).toBe(1);
   });
 
