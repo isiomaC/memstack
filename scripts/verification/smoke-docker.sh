@@ -5,6 +5,7 @@ project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 image=${MEMSTACK_DOCKER_IMAGE:-memstack-server-smoke:local}
 container_name="memstack-server-smoke-$$"
 temporary_dir=$(mktemp -d "${TMPDIR:-/tmp}/memstack-docker.XXXXXX")
+artifact_dir=${VERIFICATION_ARTIFACT_DIR:-}
 
 cleanup() {
   status=$?
@@ -13,6 +14,10 @@ cleanup() {
     docker logs "$container_name" > "$temporary_dir/container.log" 2>&1 || true
   fi
   docker rm -f "$container_name" >/dev/null 2>&1 || true
+  if [ "$status" -ne 0 ] && [ -n "$artifact_dir" ]; then
+    mkdir -p "$artifact_dir"
+    cp "$temporary_dir/container.log" "$artifact_dir/container.log" 2>/dev/null || true
+  fi
   if [ "$status" -ne 0 ] && [ -f "$temporary_dir/container.log" ]; then cat "$temporary_dir/container.log" >&2; fi
   rm -rf "$temporary_dir"
   exit "$status"
