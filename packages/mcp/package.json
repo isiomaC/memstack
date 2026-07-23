@@ -36,11 +36,11 @@
     "prepublishOnly": "npx tsc --noEmit && npx vitest run"
   },
   "dependencies": {
-    "@memstack/config-env": "workspace:*",
     "@memstack/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {
+    "@memstack/config-env": "workspace:*",
     "tsup": "^8.0.0",
     "typescript": "^5.7.0",
     "vitest": "^1.0.0"

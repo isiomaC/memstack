@@ -37,13 +37,13 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
-    "@memstack/config-env": "workspace:*",
     "@memstack/core": "workspace:*",
     "hono": "^4.0.0",
     "zod": "^3.23.8",
     "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
+    "@memstack/config-env": "workspace:*",
     "@types/node": "^22.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.7.0",

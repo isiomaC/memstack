@@ -8,5 +8,6 @@ export default defineConfig({
   sourcemap: true,
   splitting: false,
   treeshake: true,
+  noExternal: ["@memstack/config-env"],
   external: ["postgres", "pg", "mem0ai", "mem0ai/oss", "@getzep/zep-cloud", "@upstash/redis", "@upstash/vector"],
 });
