@@ -1,5 +1,7 @@
 # MemStack
 
+> Implementation priority is maintained in the [canonical roadmap](docs/ROADMAP.md).
+
 > The open-source memory layer for AI agents — store, retrieve, summarize, and prune.
 
 [![npm version](https://img.shields.io/npm/v/@memstack/core)](https://www.npmjs.com/package/@memstack/core)
