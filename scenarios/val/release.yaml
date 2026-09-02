@@ -3,11 +3,11 @@ product: memstack
 claim: The selected MemStack revision builds and its public in-memory adapter completes a store, get, and count journey.
 setup:
   - corepack enable
-  - pnpm --dir "${target}" install --frozen-lockfile
-  - pnpm --dir "${target}" build
+  - pnpm --dir "${cwd}" install --frozen-lockfile
+  - pnpm --dir "${cwd}" build
 steps:
   - name: exercise the selected target artifact
-    run: node "${target}/scripts/verification/val-smoke.mjs"
+    run: node "${cwd}/scripts/verification/val-smoke.mjs"
     expect:
       - exitCode: 0
       - jsonPath: $.status
