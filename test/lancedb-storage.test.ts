@@ -3,6 +3,7 @@ import { LanceDBStorageAdapter } from "../src/adapters/storage/lancedb.js";
 
 function createMockLanceDB() {
   const rows: Record<string, unknown>[] = [];
+  let prefilterCalled = false;
   const mockTable = {
     async add(data: Record<string, unknown>[]) { rows.push(...data); },
     search() {
@@ -10,7 +11,14 @@ function createMockLanceDB() {
         limit(_n: number) {
           return {
             where(_pred: string) {
-              return { execute: async () => rows.map(r => ({ ...r, _distance: 0 })) as Record<string, unknown>[] };
+              const execute = async () => rows.map(r => ({ ...r, _distance: 0 })) as Record<string, unknown>[];
+              return {
+                execute,
+                prefilter(value: boolean) {
+                  prefilterCalled = value;
+                  return { execute };
+                },
+              };
             },
           };
         },
@@ -32,6 +40,7 @@ function createMockLanceDB() {
     rows,
     createTableCalled: () => createTableCalled,
     openTableCalled: () => openTableCalled,
+    prefilterCalled: () => prefilterCalled,
     connection: {
       async createTable() { createTableCalled = true; return mockTable; },
       async openTable() { openTableCalled = true; return mockTable; },
@@ -99,6 +108,17 @@ describe("LanceDBStorageAdapter", () => {
 
     const result = await adapter.get("nonexistent");
     expect(result).toBeNull();
+  });
+
+  it("prefilters exact ID lookups before applying the vector limit", async () => {
+    const mock = createMockLanceDB();
+    const adapter = new LanceDBStorageAdapter({ connection: mock.connection });
+    await adapter.initialize();
+
+    const memory = await adapter.store({ actorId: "a", content: "target" });
+    await adapter.get(memory.id);
+
+    expect(mock.prefilterCalled()).toBe(true);
   });
 
   it("deletes a memory", async () => {

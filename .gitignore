@@ -4,6 +4,8 @@ dist/
 *.log
 .DS_Store
 coverage/
+artifacts/
+.worktrees/
 .superpowers/
 docs/internal/
 docs/qa/

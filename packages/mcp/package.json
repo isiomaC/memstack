@@ -18,7 +18,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "repository": {
     "type": "git",
@@ -33,14 +33,14 @@
     "dev": "tsup src/index.ts src/cli.ts --format esm --dts --watch",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "prepublishOnly": "npx tsc --noEmit && npx vitest run"
+    "prepublishOnly": "pnpm exec tsc --noEmit && pnpm exec vitest run"
   },
   "dependencies": {
-    "@memstack/config-env": "workspace:*",
     "@memstack/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {
+    "@memstack/config-env": "workspace:*",
     "tsup": "^8.0.0",
     "typescript": "^5.7.0",
     "vitest": "^1.0.0"

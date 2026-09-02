@@ -11,17 +11,20 @@ pnpm install
 ## Development
 
 ```bash
-pnpm build        # build @memstack/core
-pnpm check        # TypeScript type check (all packages)
-pnpm test         # unit tests (393)
-pnpm test:e2e     # E2E tests against real backends (requires Docker)
+pnpm build:all       # build core and every workspace package
+pnpm check:all       # type-check core and every workspace package
+pnpm test            # 407 core tests
+pnpm test:packages   # 78 package tests
+pnpm test:e2e:run    # start backends, run 80 E2E tests, and clean up
+pnpm verify          # complete checks, tests, builds, E2E, package, and Docker verification
 ```
 
-For E2E tests, start the backends first:
+To keep the Docker services running while iterating on E2E tests:
 
 ```bash
 docker compose up -d
 pnpm test:e2e
+docker compose down -v
 ```
 
 Working on a sub-package:
@@ -41,7 +44,7 @@ Add a unit test file at `test/<name>-storage.test.ts` and an E2E file at `e2e/<n
 ## Pull requests
 
 - Keep PRs focused — one adapter, one feature, one fix per PR.
-- Run `pnpm check && pnpm test` before opening a PR; CI will block on failures.
+- Run `pnpm check && pnpm test` during development and `pnpm verify` before opening a PR; CI's `verification` job blocks on failures when configured as a required check.
 - Describe *why* in the PR body, not just what changed.
 - New adapters should include unit tests and, where possible, an E2E test.
 

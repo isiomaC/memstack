@@ -1,0 +1,40 @@
+name: Val release evidence
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install Val
+        run: npm install --global @stlw/val@0.1.1
+      - name: Install MemStack dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run Val artifact evidence
+        run: |
+          val run scenarios/val/ \
+            --judge none \
+            --ledger val-ledger.jsonl \
+            --report-dir val-report
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memstack-val-evidence
+          path: |
+            val-report/
+            val-ledger.jsonl
+          if-no-files-found: warn

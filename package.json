@@ -16,12 +16,21 @@
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --clean",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
-    "test": "npx vitest run test/",
-    "test:watch": "npx vitest test/",
-    "test:e2e": "npx vitest run --config vitest.e2e.config.ts",
+    "test": "vitest run --dir test",
+    "test:watch": "vitest --dir test",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:e2e:run": "bash e2e/run-all.sh",
     "check": "tsc --noEmit",
-    "prepublishOnly": "npx tsup src/index.ts --format cjs,esm --dts --clean && npx tsc --noEmit && npx vitest run",
+    "check:packages": "pnpm build && pnpm --filter @memstack/config-env build && pnpm --filter @memstack/config-env check && pnpm --filter @memstack/cli check && pnpm --filter @memstack/mcp check && pnpm --filter @memstack/server check",
+    "check:all": "pnpm check && pnpm check:packages",
+    "test:unit": "vitest run --dir test",
+    "test:packages": "pnpm build:all && pnpm --filter @memstack/config-env test && pnpm --filter @memstack/cli test && pnpm --filter @memstack/mcp test && pnpm --filter @memstack/server test",
+    "build:all": "bash scripts/verification/build-all.sh",
+    "smoke:artifacts": "bash scripts/verification/smoke-artifacts.sh",
+    "smoke:packages": "bash scripts/verification/smoke-packages.sh",
+    "smoke:docker": "bash scripts/verification/smoke-docker.sh",
+    "verify": "pnpm check:all && pnpm test:unit && pnpm test:packages && pnpm build:all && pnpm test:e2e:run && pnpm smoke:artifacts && pnpm smoke:packages && pnpm smoke:docker",
+    "prepublishOnly": "pnpm exec tsup src/index.ts --format cjs,esm --dts --clean && pnpm exec tsc --noEmit && pnpm exec vitest run",
     "publish:all": "pnpm publish -r --access public"
   },
   "keywords": [
@@ -44,7 +53,7 @@
   },
   "homepage": "https://github.com/isiomaC/memstack",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "devDependencies": {
     "@qdrant/js-client-rest": "^1.18.0",

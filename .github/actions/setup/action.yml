@@ -1,0 +1,24 @@
+name: Setup MemStack
+description: Install the pinned Node and pnpm toolchain and workspace dependencies
+inputs:
+  node-version:
+    description: Node.js version
+    required: true
+  bun:
+    description: Install Bun
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 10.29.3
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm
+    - if: inputs.bun == 'true'
+      uses: oven-sh/setup-bun@v2
+    - shell: bash
+      run: pnpm install --frozen-lockfile
