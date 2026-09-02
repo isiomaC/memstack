@@ -4,6 +4,10 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   verify:
     uses: ./.github/workflows/ci.yml
@@ -11,8 +15,7 @@ jobs:
   publish:
     needs: verify
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    environment: npm-release
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -21,12 +24,38 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
+          # Do not set registry-url: it writes an empty auth config that
+          # prevents npm from initiating its OIDC trusted-publishing flow.
+          package-manager-cache: false
+      - name: Setup npm
+        run: npm install --global npm@12.0.2
+      - name: Verify npm Trusted Publishing prerequisites
+        run: |
+          node --version
+          npm --version
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
       - run: node scripts/verification/check-versions.mjs
       - run: pnpm build:all
-      - run: pnpm publish -r --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Pack publishable packages
+        run: |
+          set -euo pipefail
+          PACK_DIR="$RUNNER_TEMP/memstack-packages"
+          mkdir -p "$PACK_DIR"
+          pnpm --filter @memstack/core pack --pack-destination "$PACK_DIR"
+          pnpm --filter @memstack/cli pack --pack-destination "$PACK_DIR"
+          pnpm --filter @memstack/mcp pack --pack-destination "$PACK_DIR"
+          pnpm --filter @memstack/server pack --pack-destination "$PACK_DIR"
+      - name: Publish @memstack/core
+        run: npm publish "$RUNNER_TEMP/memstack-packages/memstack-core-${GITHUB_REF_NAME#v}.tgz" --provenance --access public
+      - name: Publish @memstack/cli
+        run: npm publish "$RUNNER_TEMP/memstack-packages/memstack-cli-${GITHUB_REF_NAME#v}.tgz" --provenance --access public
+      - name: Publish @memstack/mcp
+        run: npm publish "$RUNNER_TEMP/memstack-packages/memstack-mcp-${GITHUB_REF_NAME#v}.tgz" --provenance --access public
+      - name: Publish @memstack/server
+        run: npm publish "$RUNNER_TEMP/memstack-packages/memstack-server-${GITHUB_REF_NAME#v}.tgz" --provenance --access public
+      # npm Trusted Publishing exchanges this job's OIDC identity for a
+      # short-lived publish credential. No NPM_TOKEN secret is used.
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
