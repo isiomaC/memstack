@@ -1,6 +1,6 @@
 # @memstack/server
 
-REST API server for MemStack — self-hostable agent memory. Runs on Node.js 18+ or Bun.
+REST API server for MemStack — self-hostable agent memory. Runs on Node.js 22+ or Bun.
 
 ## Installation
 

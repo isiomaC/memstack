@@ -2,8 +2,6 @@ id: memstack-release-artifact
 product: memstack
 claim: The selected MemStack revision builds and its public in-memory adapter completes a store, get, and count journey.
 setup:
-  - corepack enable
-  - pnpm --dir "${cwd}" install --frozen-lockfile
   - pnpm --dir "${cwd}" build
 steps:
   - name: exercise the selected target artifact

@@ -35,7 +35,7 @@ This doc collects copy-pasteable config for as many MCP clients as we could veri
 
 ## Prerequisites
 
-- Node.js 18+ (memstack-mcp is a Node process; the client spawns it, you don't run it directly)
+- Node.js 22+ (memstack-mcp is a Node process; the client spawns it, you don't run it directly)
 - At least one of `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` (required — `packages/mcp/src/config.ts` throws at startup without one)
 - A storage backend choice. Default is `MEMSTACK_STORAGE=memory` (nothing persists across restarts) — fine for testing, not for real use. See [Environment variable reference](#environment-variable-reference) for Postgres/Redis/SQLite/disk/markdown options.
 
