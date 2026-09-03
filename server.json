@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.isiomaC/memstack",
+  "description": "MCP server for persistent, searchable memory for AI agents.",
+  "repository": {
+    "url": "https://github.com/isiomaC/memstack",
+    "source": "github"
+  },
+  "version": "0.7.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@memstack/mcp",
+      "version": "0.7.1",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
