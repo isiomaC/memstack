@@ -29,14 +29,22 @@ for archive in "$pack_dir"/*.tgz; do
   grep -q '^package/dist/' "$archive.contents"
 done
 
-node --input-type=module - "$consumer_dir/package.json" <<'NODE'
+node --input-type=module - "$consumer_dir/package.json" "$pack_dir"/memstack-core-*.tgz <<'NODE'
 import { writeFile } from "node:fs/promises";
-await writeFile(process.argv[2], JSON.stringify({ name: "memstack-package-smoke", version: "1.0.0", private: true, type: "module" }));
+await writeFile(process.argv[2], JSON.stringify({
+  name: "memstack-package-smoke",
+  version: "1.0.0",
+  private: true,
+  type: "module",
+  pnpm: { overrides: { "@memstack/core": `file:${process.argv[3]}` } },
+}));
 NODE
 
 cd "$consumer_dir"
-pnpm add "$pack_dir"/memstack-core-*.tgz
-pnpm add "$pack_dir"/memstack-cli-*.tgz "$pack_dir"/memstack-mcp-*.tgz "$pack_dir"/memstack-server-*.tgz
+# Install every locally packed package in one resolution so inter-package
+# dependencies (for example, cli -> core) resolve to these release artifacts
+# instead of querying npm for a version that has not been published yet.
+pnpm add "$pack_dir"/*.tgz
 
 node --input-type=module -e 'const core = await import("@memstack/core"); if (typeof core.MemStack !== "function") process.exit(1)'
 node --input-type=commonjs -e 'const core = require("@memstack/core"); if (typeof core.MemStack !== "function") process.exit(1)'
