@@ -5,6 +5,7 @@
 > The open-source memory layer for AI agents — store, retrieve, summarize, and prune.
 
 [![npm version](https://img.shields.io/npm/v/@memstack/core)](https://www.npmjs.com/package/@memstack/core)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-%40memstack%2Fmcp-blueviolet)](https://registry.modelcontextprotocol.io/?q=io.github.isiomaC%2Fmemstack)
 [![CI](https://github.com/isiomaC/memstack/actions/workflows/ci.yml/badge.svg)](https://github.com/isiomaC/memstack/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP Reference](https://img.shields.io/badge/MCP-LLM%20Reference-blue)](https://gitmcp.io/isiomaC/memstack)
