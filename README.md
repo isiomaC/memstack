@@ -5,14 +5,21 @@
 > The open-source memory layer for AI agents — store, retrieve, summarize, and prune.
 
 [![npm version](https://img.shields.io/npm/v/@memstack/core)](https://www.npmjs.com/package/@memstack/core)
+[![skills.sh](https://skills.sh/b/isiomaC/memstack)](https://skills.sh/isiomaC/memstack)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-%40memstack%2Fmcp-blueviolet)](https://registry.modelcontextprotocol.io/?q=io.github.isiomaC%2Fmemstack)
 [![CI](https://github.com/isiomaC/memstack/actions/workflows/ci.yml/badge.svg)](https://github.com/isiomaC/memstack/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP Reference](https://img.shields.io/badge/MCP-LLM%20Reference-blue)](https://gitmcp.io/isiomaC/memstack)
 
 ```bash
+# Use MemStack in your application
 npm install @memstack/core
+
+# Give your coding agent the MemStack skill
+npx skills add isiomaC/memstack
 ```
+
+`@memstack/core` is the runtime SDK; the Agent Skill teaches compatible coding agents how to integrate and operate MemStack correctly.
 
 **The problem:** AI agents forget. Every interaction starts from zero. You either stuff everything into the context window (expensive, slow, degrades output quality) or the agent has no memory of past conversations.
 

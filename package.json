@@ -21,8 +21,9 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:e2e:run": "bash e2e/run-all.sh",
     "check": "tsc --noEmit",
+    "verify:skill": "node scripts/verify-skill.mjs",
     "check:packages": "pnpm build && pnpm --filter @memstack/config-env build && pnpm --filter @memstack/config-env check && pnpm --filter @memstack/cli check && pnpm --filter @memstack/mcp check && pnpm --filter @memstack/server check",
-    "check:all": "pnpm check && pnpm check:packages",
+    "check:all": "pnpm verify:skill && pnpm check && pnpm check:packages",
     "test:unit": "vitest run --dir test",
     "test:packages": "pnpm build:all && pnpm --filter @memstack/config-env test && pnpm --filter @memstack/cli test && pnpm --filter @memstack/mcp test && pnpm --filter @memstack/server test",
     "build:all": "bash scripts/verification/build-all.sh",
@@ -68,7 +69,8 @@
     "typescript": "^5.7.0",
     "vectordb": "^0.21.2",
     "vitest": "^1.0.0",
-    "weaviate-client": "^3.13.1"
+    "weaviate-client": "^3.13.1",
+    "yaml": "^2.9.0"
   },
   "files": [
     "dist"
