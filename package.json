@@ -1,6 +1,7 @@
 {
   "name": "@memstack/core",
   "version": "0.7.2",
+  "packageManager": "pnpm@10.29.3",
   "description": "Open-source AI memory framework \u2014 store, retrieve, summarize, and prune memories for LLM agents and games",
   "type": "module",
   "main": "dist/index.js",
