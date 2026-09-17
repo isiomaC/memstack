@@ -9,5 +9,5 @@ export default defineConfig({
   splitting: false,
   treeshake: true,
   noExternal: ["@memstack/config-env"],
-  external: ["postgres", "pg", "mem0ai", "mem0ai/oss", "@getzep/zep-cloud", "@upstash/redis", "@upstash/vector"],
+  external: ["better-sqlite3", "ioredis", "postgres", "pg", "mem0ai", "mem0ai/oss", "@getzep/zep-cloud", "@upstash/redis", "@upstash/vector"],
 });

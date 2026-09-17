@@ -8,6 +8,19 @@ MCP server for MemStack — persistent AI agent memory via the Model Context Pro
 npm install -g @memstack/mcp
 ```
 
+Install a database driver only when selecting that storage backend:
+
+```bash
+npm install @memstack/mcp better-sqlite3 # SQLite
+npm install @memstack/mcp ioredis        # Redis
+npm install @memstack/mcp postgres       # Postgres (or pg)
+```
+
+Memory, disk, and Markdown storage need only `@memstack/mcp`. SQLite requires
+a writable database path and package lifecycle scripts. The Glama deployment
+image is `packages/mcp/Dockerfile`; it runs the stdio MCP command directly,
+which Glama wraps as its hosted transport. It is not the REST server image.
+
 ## Quick Start
 
 Add to your MCP client config (`~/.config/opencode/`, `~/.claude/mcp.json`, or `.cursor/mcp.json`):
