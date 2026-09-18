@@ -74,7 +74,6 @@ export class PostgresStorageAdapter implements StorageProvider {
     const connStr = this._connectionString ?? this._buildConnString();
 
     try {
-      // @ts-expect-error — optional peer dep, user installs 'postgres' (postgres.js) themselves
       const { default: createPostgres } = await import("postgres");
       const options: Record<string, unknown> = {};
       if (this._ssl) {
@@ -88,7 +87,7 @@ export class PostgresStorageAdapter implements StorageProvider {
       };
     } catch {
       try {
-        // @ts-expect-error — optional peer dep, user installs 'pg' (node-postgres) themselves
+        // @ts-expect-error — optional peer dep without bundled declarations
         const { Pool } = await import("pg");
         const pool = new Pool({ connectionString: connStr, ssl: this._ssl }) as PgPool & { end: () => Promise<void> };
         return { query: (text: string, params?: unknown[]) => pool.query(text, params), end: () => pool.end() };

@@ -70,10 +70,19 @@ jobs:
           path: artifacts/docker/
           if-no-files-found: warn
 
+  mcp-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          node-version: 22
+      - run: pnpm smoke:mcp-docker
+
   verification:
     if: always()
     name: verification
-    needs: [runtime, packages, e2e, docker]
+    needs: [runtime, packages, e2e, docker, mcp-docker]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,14 +93,17 @@ jobs:
           "packages=${{ needs.packages.result }}"
           "e2e=${{ needs.e2e.result }}"
           "docker=${{ needs.docker.result }}"
+          "mcp-docker=${{ needs.mcp-docker.result }}"
       - name: Require every verification job
         env:
           RUNTIME_RESULT: ${{ needs.runtime.result }}
           PACKAGES_RESULT: ${{ needs.packages.result }}
           E2E_RESULT: ${{ needs.e2e.result }}
           DOCKER_RESULT: ${{ needs.docker.result }}
+          MCP_DOCKER_RESULT: ${{ needs.mcp-docker.result }}
         run: |
           test "$RUNTIME_RESULT" = success
           test "$PACKAGES_RESULT" = success
           test "$E2E_RESULT" = success
           test "$DOCKER_RESULT" = success
+          test "$MCP_DOCKER_RESULT" = success
