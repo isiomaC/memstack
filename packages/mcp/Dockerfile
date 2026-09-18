@@ -7,7 +7,7 @@ COPY src ./src
 COPY packages ./packages
 COPY scripts ./scripts
 COPY tsconfig.json tsup.config.ts ./
-RUN pnpm install --frozen-lockfile --allow-build=better-sqlite3 && pnpm build:all \
+RUN pnpm install --frozen-lockfile && pnpm build:all \
   && mkdir /runtime \
   && pnpm pack --pack-destination /tmp/tarballs \
   && pnpm --dir packages/mcp pack --pack-destination /tmp/tarballs \
