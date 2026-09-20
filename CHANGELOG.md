@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.7.3
+
+### @memstack/mcp
+
+#### Distribution and runtime
+- Externalized SQLite and Redis storage drivers behind explicit optional peer
+  contracts, so packed MCP consumers install only the storage runtime they use.
+- Added a Node 22 stdio MCP Docker image and a CI smoke gate for the
+  Glama-targeted runtime.
+- Added packed-consumer SQLite MCP store/retrieve verification and documented
+  storage-specific installation requirements.
+
+### Infrastructure
+- The release verification suite now covers the MCP image separately from the
+  REST server image.
+
 ## v0.7.0
 
 ### @memstack/core
