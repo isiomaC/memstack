@@ -40,6 +40,14 @@
     "@memstack/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
+  "peerDependencies": {
+    "better-sqlite3": "^11.10.0",
+    "ioredis": "^5.11.1"
+  },
+  "peerDependenciesMeta": {
+    "better-sqlite3": { "optional": true },
+    "ioredis": { "optional": true }
+  },
   "devDependencies": {
     "@memstack/config-env": "workspace:*",
     "tsup": "^8.0.0",
