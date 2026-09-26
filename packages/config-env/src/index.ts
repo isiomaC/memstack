@@ -68,7 +68,7 @@ async function buildStorageAdapter(): Promise<StorageProvider> {
         return new SQLiteStorageAdapter({ db: db as never });
       } catch {
         throw new Error(
-          "SQLite requires better-sqlite3. Install: npm install better-sqlite3",
+          "SQLite requires better-sqlite3. Install: npm install better-sqlite3@^11.10.0",
         );
       }
     }
@@ -82,7 +82,7 @@ async function buildStorageAdapter(): Promise<StorageProvider> {
         return new RedisStorageAdapter({ redis: client as never });
       } catch {
         throw new Error(
-          "Redis requires ioredis. Install: npm install ioredis",
+          "Redis requires ioredis. Install: npm install ioredis@^5.11.1",
         );
       }
     }

@@ -32,7 +32,8 @@
     "smoke:packages": "bash scripts/verification/smoke-packages.sh",
     "smoke:docker": "bash scripts/verification/smoke-docker.sh",
     "smoke:mcp-docker": "bash scripts/verification/smoke-mcp-docker.sh",
-    "verify": "pnpm check:all && pnpm test:unit && pnpm test:packages && pnpm build:all && pnpm test:e2e:run && pnpm smoke:artifacts && pnpm smoke:packages && pnpm smoke:docker",
+    "smoke:mcp-npx": "node scripts/verification/smoke-mcp-npx.mjs",
+    "verify": "pnpm check:all && pnpm test:unit && pnpm test:packages && pnpm build:all && pnpm test:e2e:run && pnpm smoke:artifacts && pnpm smoke:packages && pnpm smoke:docker && pnpm smoke:mcp-docker && pnpm smoke:mcp-npx",
     "prepublishOnly": "pnpm exec tsup src/index.ts --format cjs,esm --dts --clean && pnpm exec tsc --noEmit && pnpm exec vitest run",
     "publish:all": "pnpm publish -r --access public"
   },

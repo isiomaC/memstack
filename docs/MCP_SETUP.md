@@ -15,6 +15,7 @@ This doc collects copy-pasteable config for as many MCP clients as we could veri
 - [Prerequisites](#prerequisites)
 - [Step 0: Test the server standalone before wiring up a client](#step-0-test-the-server-standalone-before-wiring-up-a-client)
 - [Universal pattern (any MCP client)](#universal-pattern-any-mcp-client)
+- [Database backends (SQLite, Postgres, Redis)](#database-backends-sqlite-postgres-redis)
 - [Client-specific setup](#client-specific-setup)
   - [Claude Code](#claude-code)
   - [Claude Desktop](#claude-desktop)
@@ -82,6 +83,72 @@ Nearly every MCP client uses some variant of this JSON shape for a local (stdio)
 If your client isn't in the list below: look for its MCP docs, find where it wants `command`/`args`/`env` (sometimes under a different top-level key — `mcpServers`, `mcp`, `context_servers`, `servers`), and drop in the block above. The `command`/`args` pair is always equivalent to running `npx -y @memstack/mcp` in a terminal with those env vars set.
 
 **Running one shared server instead of one-per-client:** every config above spawns `memstack-mcp` as a local subprocess per client (stdio transport) — fine for one agent per machine, but each client gets its own process and, if using disk/markdown storage, its own file lock. For multiple agents/processes sharing one memory server over the network, run `memstack-mcp --http --port 3939` once and point Streamable-HTTP-capable clients at `http://host:3939/mcp` instead of a `command`/`args` pair. See [`packages/mcp/README.md`](packages/mcp/README.md#transport) for details — this is newer than stdio support in the MCP ecosystem, so check your client's docs for Streamable HTTP support before relying on it.
+
+---
+
+## Database backends (SQLite, Postgres, Redis)
+
+`@memstack/mcp` does not install database drivers, so `memory`, `disk`, and `markdown` users never download them. To use SQLite, Postgres, or Redis through `npx`, add the driver with `-p` and name the `memstack-mcp` command explicitly. Keep the driver version ranges shown: they match the ranges `@memstack/mcp` supports, and an unpinned driver can resolve to an incompatible major version that npm refuses to install.
+
+The database itself is yours to run; MemStack only connects to it. These blocks use the universal shape above — apply the same `args` in any client-specific config below.
+
+### SQLite
+
+```json
+{
+  "mcpServers": {
+    "memstack": {
+      "command": "npx",
+      "args": ["-y", "-p", "@memstack/mcp", "-p", "better-sqlite3@^11.10.0", "memstack-mcp"],
+      "env": {
+        "MEMSTACK_STORAGE": "sqlite",
+        "SQLITE_PATH": "/Users/me/.memstack/memstack.db",
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}
+```
+
+`better-sqlite3` is a native module; npm downloads a prebuilt binary for common platforms and otherwise compiles it, which needs a C++ toolchain.
+
+### Postgres
+
+```json
+{
+  "mcpServers": {
+    "memstack": {
+      "command": "npx",
+      "args": ["-y", "-p", "@memstack/mcp", "-p", "postgres@^3.4.9", "memstack-mcp"],
+      "env": {
+        "MEMSTACK_STORAGE": "postgres",
+        "DATABASE_URL": "postgresql://user:pass@localhost:5432/memstack",
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}
+```
+
+The database must have the [`pgvector`](https://github.com/pgvector/pgvector) extension available; MemStack creates the extension and its table on first use.
+
+### Redis
+
+```json
+{
+  "mcpServers": {
+    "memstack": {
+      "command": "npx",
+      "args": ["-y", "-p", "@memstack/mcp", "-p", "ioredis@^5.11.1", "memstack-mcp"],
+      "env": {
+        "MEMSTACK_STORAGE": "redis",
+        "REDIS_URL": "redis://localhost:6379",
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}
+```
 
 ---
 
@@ -432,4 +499,4 @@ At least one of `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` is required — the serve
 - **Connects but tool calls error:** call `memory_health` (via Inspector or your client) — it reports storage/LLM/embedding connectivity separately, which narrows down "bad API key" vs. "bad DB connection string" fast.
 - **Memories don't persist across restarts:** you're on `MEMSTACK_STORAGE=memory` (the default). Switch to `disk`, `markdown`, `postgres`, `redis`, or `sqlite`.
 - **Memories seem to bleed across agents/sessions:** set `MEMSTACK_ACTOR` per agent, or pass `actorId` explicitly in tool calls — everything defaults to the `"default"` actor otherwise.
-- **`SQLite requires better-sqlite3` / `Redis requires ioredis`:** these are optional peer deps, install them yourself (`npm install better-sqlite3` or `npm install ioredis`) alongside `@memstack/mcp`.
+- **`SQLite requires better-sqlite3` / `Redis requires ioredis` / `requires 'postgres'`:** database drivers are optional and not installed with `@memstack/mcp`. With `npx`, add the driver with `-p` as shown in [Database backends](#database-backends-sqlite-postgres-redis); with a project install, run `npm install better-sqlite3@^11.10.0`, `npm install postgres@^3.4.9`, or `npm install ioredis@^5.11.1` alongside `@memstack/mcp`.
