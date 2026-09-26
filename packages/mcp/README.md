@@ -11,10 +11,15 @@ npm install -g @memstack/mcp
 Install a database driver only when selecting that storage backend:
 
 ```bash
-npm install @memstack/mcp better-sqlite3 # SQLite
-npm install @memstack/mcp ioredis        # Redis
-npm install @memstack/mcp postgres       # Postgres (or pg)
+npm install @memstack/mcp better-sqlite3@^11.10.0 # SQLite
+npm install @memstack/mcp ioredis@^5.11.1         # Redis
+npm install @memstack/mcp postgres@^3.4.9         # Postgres (or pg)
 ```
+
+With `npx`, add the driver with `-p` and name the command, for example
+`npx -y -p @memstack/mcp -p postgres@^3.4.9 memstack-mcp`. Copy-paste client
+configs for each backend are in
+[MCP Setup: Database backends](../../docs/MCP_SETUP.md#database-backends-sqlite-postgres-redis).
 
 Memory, disk, and Markdown storage need only `@memstack/mcp`. SQLite requires
 a writable database path and package lifecycle scripts. The Glama deployment

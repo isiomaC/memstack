@@ -75,7 +75,8 @@ docker run --detach --name "$postgres_name" --network "$network" \
   --env POSTGRES_USER=memstack --env POSTGRES_PASSWORD=memstack --env POSTGRES_DB=memstack \
   "$postgres_image" >/dev/null
 docker run --detach --name "$redis_name" --network "$network" "$redis_image" >/dev/null
-wait_ready "$postgres_name" psql -U memstack -d memstack -c "SELECT 1"
+# TCP, not the socket: the image's first-boot init server listens on the socket only.
+wait_ready "$postgres_name" psql -h 127.0.0.1 -U memstack -d memstack -c "SELECT 1"
 wait_ready "$redis_name" redis-cli ping
 
 round_trip postgres --network "$network" \
