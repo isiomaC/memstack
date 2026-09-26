@@ -79,10 +79,20 @@ jobs:
           node-version: 22
       - run: pnpm smoke:mcp-docker
 
+  mcp-npx:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          node-version: 22
+      - run: pnpm build:all
+      - run: pnpm smoke:mcp-npx
+
   verification:
     if: always()
     name: verification
-    needs: [runtime, packages, e2e, docker, mcp-docker]
+    needs: [runtime, packages, e2e, docker, mcp-docker, mcp-npx]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,6 +104,7 @@ jobs:
           "e2e=${{ needs.e2e.result }}"
           "docker=${{ needs.docker.result }}"
           "mcp-docker=${{ needs.mcp-docker.result }}"
+          "mcp-npx=${{ needs.mcp-npx.result }}"
       - name: Require every verification job
         env:
           RUNTIME_RESULT: ${{ needs.runtime.result }}
@@ -101,9 +112,11 @@ jobs:
           E2E_RESULT: ${{ needs.e2e.result }}
           DOCKER_RESULT: ${{ needs.docker.result }}
           MCP_DOCKER_RESULT: ${{ needs.mcp-docker.result }}
+          MCP_NPX_RESULT: ${{ needs.mcp-npx.result }}
         run: |
           test "$RUNTIME_RESULT" = success
           test "$PACKAGES_RESULT" = success
           test "$E2E_RESULT" = success
           test "$DOCKER_RESULT" = success
           test "$MCP_DOCKER_RESULT" = success
+          test "$MCP_NPX_RESULT" = success
