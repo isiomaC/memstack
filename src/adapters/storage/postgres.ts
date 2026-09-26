@@ -75,7 +75,9 @@ export class PostgresStorageAdapter implements StorageProvider {
 
     try {
       const { default: createPostgres } = await import("postgres");
-      const options: Record<string, unknown> = {};
+      // postgres.js logs server notices with console.log by default, which
+      // corrupts stdout-based protocols such as MCP stdio.
+      const options: Record<string, unknown> = { onnotice: () => {} };
       if (this._ssl) {
         options.ssl = typeof this._ssl === "object" ? this._ssl : "require";
       }

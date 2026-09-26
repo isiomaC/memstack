@@ -42,11 +42,13 @@
   },
   "peerDependencies": {
     "better-sqlite3": "^11.10.0",
-    "ioredis": "^5.11.1"
+    "ioredis": "^5.11.1",
+    "postgres": "^3.4.9"
   },
   "peerDependenciesMeta": {
     "better-sqlite3": { "optional": true },
-    "ioredis": { "optional": true }
+    "ioredis": { "optional": true },
+    "postgres": { "optional": true }
   },
   "devDependencies": {
     "@memstack/config-env": "workspace:*",

@@ -13,7 +13,8 @@ RUN pnpm install --frozen-lockfile && pnpm build:all \
   && pnpm --dir packages/mcp pack --pack-destination /tmp/tarballs \
   && cd /runtime \
   && npm init -y \
-  && npm install /tmp/tarballs/memstack-core-*.tgz /tmp/tarballs/memstack-mcp-*.tgz better-sqlite3@^11.10.0
+  && npm install /tmp/tarballs/memstack-core-*.tgz /tmp/tarballs/memstack-mcp-*.tgz \
+     better-sqlite3@^11.10.0 postgres@^3.4.9 ioredis@^5.11.1
 
 WORKDIR /runtime
 RUN mkdir /data

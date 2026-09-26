@@ -7,6 +7,7 @@ import { loadConfig } from "./config.js";
 import { createServer } from "./server.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 
 async function main() {
   const { values } = parseArgs({
@@ -23,9 +24,44 @@ async function main() {
     return;
   }
 
-  const server = createServer({ config, defaultActorId });
+  const ms = new MemStack(config);
+  const server = createServer({ config, defaultActorId, ms });
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  exitWhenStdinCloses(transport, ms);
+}
+
+/**
+ * Exit once the client closes stdin and every in-flight request has been
+ * answered. Open storage connections (e.g. a Postgres pool) would otherwise
+ * keep the process alive after the client has gone.
+ */
+function exitWhenStdinCloses(transport: StdioServerTransport, ms: MemStack) {
+  let pending = 0;
+  let ended = false;
+  const finish = () => {
+    if (ended && pending === 0) void ms.close().finally(() => process.exit(0));
+  };
+
+  const onmessage = transport.onmessage;
+  transport.onmessage = (message: JSONRPCMessage) => {
+    if ("method" in message && "id" in message) pending++;
+    onmessage?.(message);
+  };
+
+  const send = transport.send.bind(transport);
+  transport.send = async (message: JSONRPCMessage) => {
+    await send(message);
+    if (!("method" in message) && "id" in message) {
+      pending--;
+      finish();
+    }
+  };
+
+  process.stdin.once("end", () => {
+    ended = true;
+    finish();
+  });
 }
 
 /**
