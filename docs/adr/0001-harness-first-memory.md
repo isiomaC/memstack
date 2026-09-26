@@ -1,6 +1,6 @@
 # ADR 0001: Map MemStack onto harness-first memory
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-09-26
 
 ## Context
@@ -17,7 +17,8 @@ memstack connect codex
 The Phase 1 release gate is a cross-harness demo. A memory written in
 Claude Code must be recalled in Codex in the same project, and a memory
 written in Codex must be recalled in Claude Code. The default setup must
-need no cloud service, and memories from unrelated projects must not leak.
+need no service other than the configured LLM provider, and memories from
+unrelated projects must not leak.
 
 This ADR records how the current `0.7.x` architecture maps onto that
 target. Useful existing APIs are kept, and new names are added only where
@@ -27,14 +28,14 @@ they improve the Claude Code and Codex integrations.
 
 | Phase 1 requirement | Current MemStack | Gap |
 | --- | --- | --- |
-| Works without AI or a cloud service | `MemStack` throws without an LLM provider, and `config-env` throws unless `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is set | **Blocking.** No offline default |
+| LLM configuration for harness users | `config-env` reads `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` from the environment of each process | No persistent config; harnesses may launch without the user's shell environment |
 | Canonical record with provenance | `Memory` has `actorId`, `memoryType`, `content`, `importance`, `tags`, `metadata`, `createdAt` | No `harness`/`sessionId`/`project` provenance and no `updatedAt` |
 | Memory kinds | `interaction`, `summary`, `observation`, `fact`, `reflection` | No `preference`, `decision`, or `instruction` |
 | Namespaces (global/project/session) | A single free-form `actorId` scopes every operation | No project identity shared across harnesses |
 | Search a harness can use | SQLite keeps rows whose content contains the *entire query string* as a substring, after loading every matching row | A natural question such as "what framework do we use?" matches nothing |
 | Safe concurrent access from two processes | SQLite uses default journaling and no busy timeout | Claude Code and Codex writing at once can fail with `SQLITE_BUSY` |
 | Migrations | `CREATE TABLE IF NOT EXISTS` only | No schema version, so there is no path to add columns or FTS |
-| MCP surface | 18 tools, hand-written JSON schemas, `actorId` on each call, SDK `^1.0.0` (1.29 installed) | No harness-oriented `remember`/`recall` tools, no Zod validation, no bounded output, MCP `2026-07-28` support unverified |
+| MCP surface | 18 tools, hand-written JSON schemas, `actorId` on each call, SDK `^1.0.0` (1.29 installed) | No project-scoped tool profile, no Zod validation, no bounded output, MCP `2026-07-28` support unverified |
 | CLI | Memory operations (`store`, `retrieve`, `prune`, ...) | No `init`, `connect`, `disconnect`, `status`, `doctor`, or `memories` |
 | Harness integration | Documented manual MCP configs (`docs/MCP_SETUP.md`) | No `HarnessAdapter`, detection, config merge, verification, or rollback |
 | Default store | `MEMSTACK_STORAGE=memory` | Nothing persists by default |
@@ -46,14 +47,20 @@ real-backend verification suite.
 
 ## Decisions
 
-### D1. LLM becomes optional in Core
+### D1. An LLM remains required
 
-`MemStackConfig.llm` becomes optional. Storage, retrieval, `get`,
-`delete`, `export`, and `stats` work without it. Operations that need a
-model (`summarize`, `merge`, and `process` enrichment) fail with a
-structured `LLM_REQUIRED` error. `config-env` stops requiring an API key.
+MemStack keeps requiring an LLM provider. This deliberately deviates from
+the roadmap's "default setup needs no cloud service" and "MemStack works
+without AI" gates: MemStack uses the LLM for store-time tagging (D7),
+summarization, and merging.
 
-This widens the type, so existing callers keep working.
+- `memstack init` asks for a provider and API key and verifies them with a
+  real request before finishing.
+- Any OpenAI-compatible provider works through the existing adapter;
+  DeepSeek (`https://api.deepseek.com`, `deepseek-chat`) is verified.
+- Recall never calls the LLM (D7), so an LLM outage does not stop recall.
+- The existing Ollama adapter can later be exposed in `config-env` as a
+  local, no-cloud option.
 
 ### D2. Namespace is the existing `actorId`, with a documented format
 
@@ -72,6 +79,23 @@ tools default to the project namespace. Global memory is written only
 when a caller explicitly asks for it. Existing free-form `actorId` values
 keep working unchanged.
 
+Consequences of reusing `actorId`:
+
+- No storage adapter or schema changes; existing `actor_id` indexes serve
+  namespace lookups.
+- `global`, `project:`, and `session:` become reserved `actorId` values
+  and are documented as such.
+- Recalling the project and global namespaces together takes two lookups
+  merged in Core, because retrieval filters on one exact `actorId`.
+- Sessions of a project cannot be listed by prefix; the session ID is
+  provenance in `metadata.source` instead.
+- `stats` reports usage per namespace, and purging a namespace forgets a
+  whole project.
+- A future multi-user requirement ("user X in project Y") would need a
+  compound value or, at that point, a dedicated column.
+
+Harness recall returns the project namespace plus `global` by default.
+
 ### D3. Project identity is shared by both harnesses
 
 `project-id` is a short hash of, in order of preference:
@@ -82,7 +106,8 @@ keep working unchanged.
 3. the absolute working directory.
 
 Claude Code and Codex started in the same repository resolve to the same
-ID. Different clones of the same remote share memory.
+ID. Different clones and worktrees of the same remote share memory, and a
+monorepo is one project.
 
 ### D4. Memory kinds are extended additively
 
@@ -101,40 +126,100 @@ it. Embeddings stay out of the canonical record, as the roadmap requires.
 ### D6. Harness MCP profile
 
 `memstack-mcp` keeps its 18-tool default profile. A new
-`--profile harness` exposes only the roadmap tools:
+`--profile harness` exposes a subset of the existing tools under their
+current names:
 
 ```text
-memory_remember  memory_recall  memory_get  memory_forget  memory_status
+memory_store  memory_retrieve  memory_get  memory_delete  memory_stats
 ```
 
-Harness tools resolve the project namespace from the working directory
-and never take a raw `actorId`. They validate input with Zod, bound
-results by count and characters, and return memory IDs with provenance.
+The profile exists for isolation and safety:
+
+- The default tools take an `actorId` that falls back to `default`, and a
+  user-scoped harness registration is shared by every repository, so
+  memories would leak between projects. Harness tools resolve the project
+  namespace from the working directory and do not accept `actorId`.
+- Five tools consume less model context than 18 and are easier for the
+  model to choose between.
+- Destructive or bulk tools (`memory_purge_actor`, `memory_prune`,
+  `memory_import`, `memory_delete_many`) are not exposed to autonomous
+  agents.
+
+Harness tools validate input with Zod, bound results by count and
+characters, and return memory IDs with provenance. The server uses the
+MCP `instructions` field to tell the harness when to recall and when to
+remember; `memstack connect` does not edit the user's instruction files.
 `memstack connect` registers this profile.
+
+Before building it, confirm that Claude Code and Codex start MCP servers
+in the project's working directory. If one does not, pass the project
+through its supported configuration instead.
 
 Before building this, confirm which MCP protocol versions Claude Code and
 Codex support today, and whether the installed SDK negotiates
 `2026-07-28`. Upgrade the SDK in its own change if needed.
 
-### D7. SQLite is the default store, with WAL, migrations, and FTS5
+### D7. SQLite default store with WAL, migrations, and layered search
 
 - The default store is `~/.memstack/memstack.db`.
-- `initialize()` sets `journal_mode=WAL` and a busy timeout, and applies
-  numbered migrations tracked with `PRAGMA user_version`.
-- Migration 1 adds an FTS5 index over `content` and `tags`. Queries are
-  tokenized and ranked with BM25 instead of whole-string substring
-  matching.
+- `initialize()` sets `journal_mode=WAL` and `busy_timeout` (about 5
+  seconds), wraps multi-row writes in transactions, and applies numbered
+  migrations tracked with `PRAGMA user_version`. Concurrent writes from
+  Claude Code and Codex wait rather than fail with `SQLITE_BUSY`.
+
+Harness search has three layers:
+
+1. **FTS5 full-text search** over `content` and `tags`, with the Porter
+   stemmer, any-term matching, and BM25 ranking, instead of whole-string
+   substring matching.
+2. **Store-time LLM tags.** Harness writes ask the LLM for 3–5 topic tags
+   (the existing `autoTags` behavior), which bridges vocabulary gaps such
+   as "framework" versus "Hono". If tagging fails, the memory is still
+   stored untagged.
+3. **Bounded fallback.** When nothing matches, recall returns the most
+   important and recent memories in scope, bounded by count and
+   characters.
+
+Recall makes no LLM call, so it stays fast, deterministic, and available
+during a provider outage. Query-time LLM expansion was rejected because it
+would put the LLM on every recall. Embeddings remain an optional Phase 3
+layer, because they need a separate embedding provider (DeepSeek has
+none) and vector storage.
 
 The roadmap places FTS in Phase 3. It is pulled forward, for SQLite only,
 because the Phase 1 demo cannot pass without word-level search. Phase 3
-extracts it into `LexicalRetrievalAdapter`, and other adapters keep their
+extracts it into `LexicalRetrievalAdapter`; other adapters keep their
 current search.
 
 `better-sqlite3` stays an optional peer. `memstack connect` registers the
 documented form
 `npx -y -p @memstack/mcp -p better-sqlite3@^11.10.0 memstack-mcp`.
 
-### D8. Harness adapters start inside `@memstack/cli`
+### D8. Configuration and secrets
+
+`memstack init` writes `~/.memstack/config.json` holding the provider,
+model, base URL, API key, and store path. The file is created with mode
+`0600` in a `0700` directory. The MCP server reads it, so Claude Code and
+Codex configurations contain no secrets. Environment variables still
+override the file.
+
+- The key is never printed, logged, or included in `status`/`doctor`
+  output, and `memstack doctor` warns about permissions broader than
+  `0600`.
+- Any process running as the user, including the harnesses themselves,
+  can read the file. Environment variables and harness config files have
+  the same exposure, so this is no weaker and keeps one copy of the key.
+- OS keychain storage, or storing an environment variable name instead
+  of the key, is a later hardening step.
+
+### D9. Claude Code registration is user-scoped
+
+`memstack connect claude-code` registers MemStack once at user scope. The
+server derives the project from the working directory (D3, D6), so one
+registration serves every repository without writing `.mcp.json` into
+them.
+
+### D10. Harness adapters start inside `@memstack/cli`
 
 `HarnessAdapter`, the Claude Code adapter, and the Codex adapter live in
 `packages/cli/src/harness/`. Each returns an explicit `ConnectPlan`,
@@ -146,26 +231,39 @@ Before implementing either adapter, read the current official Claude Code
 and Codex MCP configuration documentation. Record the config file
 locations, formats, and scopes the adapter writes in its fixture tests.
 
+### D11. Hooks are a v2 add-on
+
+Phase 1 relies on MCP tools and server instructions only. Harness hooks
+are deferred until Phase 1 is stable:
+
+- session-start recall that injects the project's top memories within a
+  size budget;
+- optional per-prompt recall, at a latency cost on every prompt;
+- session-end capture, which depends on the Phase 2 decision pipeline and
+  deterministic secret filtering;
+- per-harness hook installation, rollback, fixtures, and `doctor` checks.
+
 ## Consequences
 
 - Existing `0.7.x` users see no breaking change. The new behavior is
-  additive: an optional LLM, new memory kinds, an opt-in MCP profile, and
+  additive: new memory kinds, an opt-in MCP profile, a config file, and
   new CLI commands.
 - The first slice changes Core, the SQLite adapter, `config-env`, the MCP
   server, and the CLI. It adds no new package.
-- Without an LLM, `summarize` and `merge` are unavailable. Harness recall
-  depends on SQLite FTS, not embeddings.
+- Every harness user needs an LLM provider key. Recall depends on SQLite
+  FTS and store-time tags, not embeddings.
 - `docs/ROADMAP.md` must list harness memory Phase 1 as the next priority.
 
 ## Phase 1 slices
 
 Each slice is independently testable and lands on its own branch:
 
-1. **Offline Core:** D1 and D4, plus tests that run with no API key.
-2. **SQLite default:** D7 migrations, WAL, and FTS5, plus a
-   concurrent-writer test using two processes.
-3. **Namespaces and provenance:** D2, D3, and D5 as a project-identity
-   module with fixture tests.
+1. **SQLite foundation:** D7 migrations, WAL, busy timeout, and FTS5
+   search, plus a concurrent-writer test using two processes.
+2. **Core model:** D4 memory kinds and D5 provenance, with store-time
+   tagging verified against DeepSeek.
+3. **Namespaces and config:** D2 and D3 as a project-identity module, and
+   D8 config file handling, with fixture tests.
 4. **Harness MCP profile:** D6, tested with an MCP client over stdio.
 5. **Claude Code adapter:** detect, connect, verify, disconnect, and
    status, with config fixtures.

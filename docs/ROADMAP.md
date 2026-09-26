@@ -1,7 +1,7 @@
 # MemStack Roadmap
 
 **Status:** Canonical
-**Updated:** 2026-09-03
+**Updated:** 2026-09-26
 
 This file owns MemStack implementation priority. The public README describes released behavior; dated plans preserve execution history.
 
@@ -17,11 +17,15 @@ This file owns MemStack implementation priority. The public README describes rel
 
 ## Next
 
-1. Publish and verify the `@memstack/mcp@0.7.2` entry in the official MCP Registry.
-2. Submit the verified server image and MCP metadata to Docker MCP Catalog, Smithery, and Glama.
-3. Measure successful quick-start completions and fix the largest onboarding drop-off before adding adapters.
+1. Harness memory Phase 1: `memstack init` and `memstack connect claude-code|codex`, with memory shared across both harnesses per project. Decisions and build order: [ADR 0001](adr/0001-harness-first-memory.md). The release gate is the Claude Code ↔ Codex cross-harness demo.
+2. Publish and verify the `@memstack/mcp` entry in the official MCP Registry.
+3. Submit the verified server image and MCP metadata to Docker MCP Catalog, Smithery, and Glama.
+4. Measure successful quick-start completions and fix the largest onboarding drop-off before adding adapters.
 
 ## Deferred
+
+- Harness hooks (session-start recall, per-prompt recall, session-end capture) until harness memory Phase 1 is stable; capture also waits for the Phase 2 decision pipeline.
+- OS keychain storage for the LLM API key.
 
 - New storage, LLM, or embedding adapters without a named adopter.
 - A hosted memory service before repeated OSS users request an operationally managed outcome.
