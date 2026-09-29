@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile, readdir, open, unlink, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Memory, MemoryType } from "../../types.js";
-import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "../../interfaces.js";
+import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter, StorageCapabilities } from "../../interfaces.js";
 import { storageError, notFound } from "../../errors.js";
 
 interface MemoryRecord extends Memory {
@@ -14,6 +14,7 @@ export interface DiskStorageConfig {
 }
 
 export class DiskStorageAdapter implements StorageProvider {
+  readonly capabilities: StorageCapabilities = { multiProcess: false };
   private dir: string;
   private _writeLocks = new Map<string, Promise<void>>();
   private _idIndex = new Map<string, string>();
@@ -225,25 +226,27 @@ export class DiskStorageAdapter implements StorageProvider {
         break;
     }
 
-    // Touch records on retrieval
-    const nowStr = new Date().toISOString();
-    const toTouch = results.slice(0, query.limit ?? 10);
-    const touchedActors = new Set<string>();
-    for (const r of toTouch) {
-      r._touchedAt = nowStr;
-      touchedActors.add(r.actorId);
-    }
-    // Persist touches back to disk
-    for (const actorId of touchedActors) {
-      await this._withWriteLock(actorId, async () => {
-        const records = await this._readFile(actorId);
-        let changed = false;
-        for (const r of records) {
-          const touched = toTouch.find((t) => t.id === r.id);
-          if (touched) { r._touchedAt = nowStr; changed = true; }
-        }
-        if (changed) await this._writeFile(actorId, records);
-      });
+    if (query.touch !== false) {
+      // Touch records on retrieval
+      const nowStr = new Date().toISOString();
+      const toTouch = results.slice(0, query.limit ?? 10);
+      const touchedActors = new Set<string>();
+      for (const r of toTouch) {
+        r._touchedAt = nowStr;
+        touchedActors.add(r.actorId);
+      }
+      // Persist touches back to disk
+      for (const actorId of touchedActors) {
+        await this._withWriteLock(actorId, async () => {
+          const records = await this._readFile(actorId);
+          let changed = false;
+          for (const r of records) {
+            const touched = toTouch.find((t) => t.id === r.id);
+            if (touched) { r._touchedAt = nowStr; changed = true; }
+          }
+          if (changed) await this._writeFile(actorId, records);
+        });
+      }
     }
 
     const limit = query.limit ?? 10;

@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### @memstack/core
+
+#### New features
+- `LexicalRetriever` recalls memories across several actors with BM25
+  ranking, stemming, and prefix matching over content and tags, plus a
+  bounded most-important fallback. It works on every storage adapter, needs
+  no embeddings, and makes no LLM call.
+- Optional `StorageProvider` members: `capabilities` (`multiProcess`,
+  `textSearch`) and a native `search()` hook. Existing adapters need no
+  changes.
+- `retrieve({ touch: false })` reads without marking memories as accessed.
+  Honored by the memory, disk, SQLite, Postgres, Redis, and Turso adapters,
+  which previously always touched.
+
+#### SQLite
+- `initialize()` sets `busy_timeout` (default 5000 ms, `busyTimeoutMs`) and
+  WAL mode (`walMode`), so concurrent processes wait instead of failing with
+  `SQLITE_BUSY`.
+- Schema changes are applied as numbered migrations tracked per table in
+  `memstack_schema_migrations`. Existing databases are adopted unchanged.
+- `storeBatch()` is atomic, and retrieval updates access times in one
+  transaction.
+
 ## v0.7.3
 
 ### @memstack/mcp

@@ -23,9 +23,16 @@ export type {
   LLMProvider,
   EmbeddingProvider,
   StorageProvider,
+  StorageCapabilities,
+  TextSearchQuery,
+  ScoredMemory,
   MemStackConfig,
   ProcessInput,
 } from "./interfaces.js";
+
+// Retrieval
+export { LexicalRetriever } from "./retrieval/LexicalRetriever.js";
+export type { RecallQuery, RecallHit, RecallResult, LexicalRetrieverConfig } from "./retrieval/LexicalRetriever.js";
 
 // Errors
 export { MemStackError, notFound, validationError, storageError, configError } from "./errors.js";

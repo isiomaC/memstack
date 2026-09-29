@@ -1,5 +1,5 @@
 import type { Memory, MemoryType } from "../../types.js";
-import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "../../interfaces.js";
+import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter, StorageCapabilities } from "../../interfaces.js";
 import { notFound } from "../../errors.js";
 
 interface MemoryRecord extends Memory {
@@ -7,6 +7,7 @@ interface MemoryRecord extends Memory {
 }
 
 export class InMemoryStorageAdapter implements StorageProvider {
+  readonly capabilities: StorageCapabilities = { multiProcess: false };
   private memories: Map<string, MemoryRecord> = new Map();
 
   async initialize(): Promise<void> {}
@@ -115,8 +116,10 @@ export class InMemoryStorageAdapter implements StorageProvider {
     }
 
     // Touch records on retrieval (for recency tracking in context assembly)
-    for (const r of results.slice(0, query.limit ?? 10)) {
-      r._touchedAt = new Date();
+    if (query.touch !== false) {
+      for (const r of results.slice(0, query.limit ?? 10)) {
+        r._touchedAt = new Date();
+      }
     }
 
     const limit = query.limit ?? 10;

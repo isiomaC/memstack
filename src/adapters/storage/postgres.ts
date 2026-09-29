@@ -1,5 +1,5 @@
 import type { Memory, MemoryType } from "../../types.js";
-import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "../../interfaces.js";
+import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter, StorageCapabilities } from "../../interfaces.js";
 import { notFound, configError } from "../../errors.js";
 
 type PgPool = {
@@ -33,6 +33,7 @@ export interface PostgresStorageConfig {
 }
 
 export class PostgresStorageAdapter implements StorageProvider {
+  readonly capabilities: StorageCapabilities = { multiProcess: true };
   private pool!: PgPool;
   private table: string;
   private vectorDimensions: number;
@@ -289,9 +290,11 @@ export class PostgresStorageAdapter implements StorageProvider {
 
     const { rows } = await this.pool.query(sql, params);
 
-    for (const row of rows.slice(0, limit)) {
-      const r = row as PgMemoryRow;
-      await this.pool.query(`UPDATE ${this.table} SET touched_at = NOW() WHERE id = $1`, [r.id]);
+    if (query.touch !== false) {
+      for (const row of rows.slice(0, limit)) {
+        const r = row as PgMemoryRow;
+        await this.pool.query(`UPDATE ${this.table} SET touched_at = NOW() WHERE id = $1`, [r.id]);
+      }
     }
 
     return (rows as PgMemoryRow[]).map((r) => this._rowToMemory(r));
@@ -371,9 +374,11 @@ export class PostgresStorageAdapter implements StorageProvider {
 
     const { rows } = await this.pool.query(sql, params);
 
-    for (const row of rows.slice(0, limit)) {
-      const r = row as PgMemoryRow;
-      await this.pool.query(`UPDATE ${this.table} SET touched_at = NOW() WHERE id = $1`, [r.id]);
+    if (query.touch !== false) {
+      for (const row of rows.slice(0, limit)) {
+        const r = row as PgMemoryRow;
+        await this.pool.query(`UPDATE ${this.table} SET touched_at = NOW() WHERE id = $1`, [r.id]);
+      }
     }
 
     return (rows as PgMemoryRow[]).map((r) => this._rowToMemory(r));

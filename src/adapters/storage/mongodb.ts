@@ -1,5 +1,5 @@
 import type { Memory, MemoryType } from "../../types.js";
-import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "../../interfaces.js";
+import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter, StorageCapabilities } from "../../interfaces.js";
 import { storageError, notFound } from "../../errors.js";
 
 type MongoCollection = {
@@ -34,6 +34,7 @@ interface MongoDoc {
 }
 
 export class MongoDBStorageAdapter implements StorageProvider {
+  readonly capabilities: StorageCapabilities = { multiProcess: true };
   private collection: MongoCollection;
   private vectorDimensions: number;
 

@@ -534,6 +534,29 @@ await ms.memory.retrieve({ actorId: "x", query: "login bug", strategy: "hybrid" 
 - Use `semantic` for RAG, document search, knowledge base queries
 - Use `hybrid` for most agent memory — it balances meaning with significance
 
+### Keyword recall on any storage adapter
+
+`LexicalRetriever` answers natural questions without embeddings or an LLM
+call, and behaves the same on every storage adapter. It loads the memories
+in the given actors through `retrieve()`, then ranks them in MemStack with
+BM25 over content and tags, with stemming and prefix matching. When nothing
+matches, it returns the most important memories instead.
+
+```typescript
+import { LexicalRetriever } from "@memstack/core";
+
+const retriever = new LexicalRetriever(storage);
+const { hits, fallback } = await retriever.recall({
+  actorIds: ["project:abc", "global"], // Searched together
+  query: "What framework does this project use?",
+  limit: 10,                           // Max results
+  maxChars: 8000,                      // Max total content; the top hit is always returned
+});
+```
+
+Up to 2,000 memories per actor are ranked (`candidateLimit`). Only returned
+memories are marked as accessed.
+
 ---
 
 ## Embeddings
@@ -934,6 +957,19 @@ const ms = new MemStack({
 ### Custom Storage
 
 Implement `StorageProvider` for any database. The interface is 9 methods. See the reference section above for the full contract.
+
+Optional members, none of them required:
+
+- `capabilities: { multiProcess?, textSearch? }` declares whether several
+  processes can share the store safely and whether `search()` is native.
+- `search(query)` provides native full-text search. `LexicalRetriever` uses
+  it when `textSearch` is declared and ranks memories itself otherwise.
+- `retrieve()` should honor `touch: false` by returning memories without
+  marking them as accessed.
+
+`SQLiteStorageAdapter` enables WAL and a 5-second busy timeout so several
+processes can share one database file. Set `walMode: false` or
+`busyTimeoutMs` to change this.
 
 ### Custom LLM / Embedding
 
