@@ -1,7 +1,7 @@
 # ADR 0001: Map MemStack onto harness-first memory
 
 **Status:** Accepted
-**Date:** 2026-09-26
+**Date:** 2026-09-26 (D7 revised 2026-09-29)
 
 ## Context
 
@@ -34,7 +34,7 @@ they improve the Claude Code and Codex integrations.
 | Namespaces (global/project/session) | A single free-form `actorId` scopes every operation | No project identity shared across harnesses |
 | Search a harness can use | SQLite keeps rows whose content contains the *entire query string* as a substring, after loading every matching row | A natural question such as "what framework do we use?" matches nothing |
 | Safe concurrent access from two processes | SQLite uses default journaling and no busy timeout | Claude Code and Codex writing at once can fail with `SQLITE_BUSY` |
-| Migrations | `CREATE TABLE IF NOT EXISTS` only | No schema version, so there is no path to add columns or FTS |
+| Migrations | `CREATE TABLE IF NOT EXISTS` only | No schema version, so there is no path to add columns or indexes |
 | MCP surface | 18 tools, hand-written JSON schemas, `actorId` on each call, SDK `^1.0.0` (1.29 installed) | No project-scoped tool profile, no Zod validation, no bounded output, MCP `2026-07-28` support unverified |
 | CLI | Memory operations (`store`, `retrieve`, `prune`, ...) | No `init`, `connect`, `disconnect`, `status`, `doctor`, or `memories` |
 | Harness integration | Documented manual MCP configs (`docs/MCP_SETUP.md`) | No `HarnessAdapter`, detection, config merge, verification, or rollback |
@@ -159,19 +159,29 @@ Before building this, confirm which MCP protocol versions Claude Code and
 Codex support today, and whether the installed SDK negotiates
 `2026-07-28`. Upgrade the SDK in its own change if needed.
 
-### D7. SQLite default store with WAL, migrations, and layered search
+### D7. Harness memory is storage-agnostic
 
-- The default store is `~/.memstack/memstack.db`.
-- `initialize()` sets `journal_mode=WAL` and `busy_timeout` (about 5
-  seconds), wraps multi-row writes in transactions, and applies numbered
-  migrations tracked with `PRAGMA user_version`. Concurrent writes from
-  Claude Code and Codex wait rather than fail with `SQLITE_BUSY`.
+Harness memory works with every supported storage adapter. It depends only
+on the existing `StorageProvider` contract, and no feature is tied to one
+database.
 
-Harness search has three layers:
+**Storage drivers are never installed by MemStack.** This is a core design
+principle and does not change for harness memory. Users install the driver
+for the store they choose (`better-sqlite3`, `pg`, `ioredis`, ...)
+themselves, as already documented. No `@memstack/*` package depends on a
+driver, and `memstack init`/`connect` never install one. `init` asks which
+store to use and checks that its driver can be loaded. `doctor` reports a
+missing driver together with the documented install command.
 
-1. **FTS5 full-text search** over `content` and `tags`, with the Porter
-   stemmer, any-term matching, and BM25 ranking, instead of whole-string
-   substring matching.
+#### Recall lives in Core
+
+A `LexicalRetriever` in Core serves harness recall in three layers:
+
+1. **Lexical ranking.** Core loads the memories in scope through
+   `storage.retrieve()` (no `query`, so adapter-specific text matching is
+   not involved). It then ranks them over `content` and `tags`: tokenize,
+   drop stopwords, stem, match any term, and score with BM25. The stemmer
+   is built in, with no new dependency.
 2. **Store-time LLM tags.** Harness writes ask the LLM for 3–5 topic tags
    (the existing `autoTags` behavior), which bridges vocabulary gaps such
    as "framework" versus "Hono". If tagging fails, the memory is still
@@ -180,20 +190,51 @@ Harness search has three layers:
    important and recent memories in scope, bounded by count and
    characters.
 
-Recall makes no LLM call, so it stays fast, deterministic, and available
-during a provider outage. Query-time LLM expansion was rejected because it
-would put the LLM on every recall. Embeddings remain an optional Phase 3
-layer, because they need a separate embedding provider (DeepSeek has
-none) and vector storage.
+Candidates are capped (default 2,000 per namespace, most important and
+recent first), which comfortably covers one project's memories. Recall
+makes no LLM call, so it stays fast, deterministic, and available during a
+provider outage. Query-time LLM expansion was rejected because it would
+put the LLM on every recall. Embeddings remain an optional Phase 3 layer.
 
-The roadmap places FTS in Phase 3. It is pulled forward, for SQLite only,
-because the Phase 1 demo cannot pass without word-level search. Phase 3
-extracts it into `LexicalRetrievalAdapter`; other adapters keep their
-current search.
+#### Optional adapter capabilities
 
-`better-sqlite3` stays an optional peer. `memstack connect` registers the
-documented form
-`npx -y -p @memstack/mcp -p better-sqlite3@^11.10.0 memstack-mcp`.
+`StorageProvider` gains optional, additive members; no adapter is required
+to change:
+
+- `capabilities?: { multiProcess?: boolean; textSearch?: boolean }`.
+- `search?(query)`: native full-text search (for example SQLite FTS5,
+  Postgres `tsvector`, or MongoDB `$text`) returning scored memories in
+  scope. Core uses it when present and falls back to its own ranking
+  otherwise.
+
+Native search is a later performance step for large namespaces, not part
+of Phase 1.
+
+#### Concurrent harness processes
+
+Claude Code and Codex are separate processes that share one store. Server
+databases (Postgres, Redis, MongoDB, ...) already handle this. File-based
+adapters must either make concurrent access safe or declare
+`multiProcess: false`, in which case `connect` and `doctor` warn when both
+harnesses use them. For SQLite, `initialize()` sets `busy_timeout` (about
+5 seconds) and `journal_mode=WAL`, runs multi-row writes in
+`BEGIN IMMEDIATE` transactions, and applies numbered migrations. Versions
+are tracked per table rather than with `PRAGMA user_version`, so adapters
+with different table names can share a file. This is SQLite correctness
+that benefits every SQLite user, not harness-specific logic.
+
+#### Proof
+
+A shared harness conformance suite runs against every adapter: namespace
+isolation, recall of a natural question ("what framework?" finds "uses
+Hono"), updates and deletes, and, where `multiProcess` is declared,
+concurrent writes from two processes. It runs against the in-memory,
+SQLite, and disk adapters in unit tests and against the server backends
+in the Docker end-to-end suite.
+
+This supersedes the earlier plan to add FTS5 search to the SQLite adapter
+only. The roadmap's Phase 3 `RetrievalAdapter` grows from
+`LexicalRetriever`, and native `search()` implementations plug into it.
 
 ### D8. Configuration and secrets
 
@@ -248,18 +289,23 @@ are deferred until Phase 1 is stable:
 - Existing `0.7.x` users see no breaking change. The new behavior is
   additive: new memory kinds, an opt-in MCP profile, a config file, and
   new CLI commands.
-- The first slice changes Core, the SQLite adapter, `config-env`, the MCP
-  server, and the CLI. It adds no new package.
-- Every harness user needs an LLM provider key. Recall depends on SQLite
-  FTS and store-time tags, not embeddings.
+- Phase 1 changes Core, the SQLite adapter, `config-env`, the MCP server,
+  and the CLI. It adds no new package and no storage driver dependency.
+- Harness memory works on any supported store; the user picks one and
+  installs its driver.
+- Every harness user needs an LLM provider key. Recall depends on Core
+  lexical ranking and store-time tags, not embeddings or a specific
+  database.
 - `docs/ROADMAP.md` must list harness memory Phase 1 as the next priority.
 
 ## Phase 1 slices
 
 Each slice is independently testable and lands on its own branch:
 
-1. **SQLite foundation:** D7 migrations, WAL, busy timeout, and FTS5
-   search, plus a concurrent-writer test using two processes.
+1. **Storage-agnostic recall:** D7 `LexicalRetriever` in Core, optional
+   adapter capabilities, the harness conformance suite, and SQLite
+   concurrency fixes (WAL, busy timeout, migrations, transactions) with a
+   two-process writer test.
 2. **Core model:** D4 memory kinds and D5 provenance, with store-time
    tagging verified against DeepSeek.
 3. **Namespaces and config:** D2 and D3 as a project-identity module, and
