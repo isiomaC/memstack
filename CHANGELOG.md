@@ -24,6 +24,21 @@
   tagging fails or times out. Reads and deletes are limited to the caller's
   namespaces, and recall never calls the LLM.
 
+- Harness namespace helpers: `GLOBAL_NAMESPACE`, `projectNamespace()`,
+  `sessionNamespace()`, and `defaultRecallNamespaces()`. `global`,
+  `project:`, and `session:` are now reserved `actorId` values.
+
+### @memstack/config-env (internal)
+- `resolveProject()` derives a stable project ID from the normalized
+  `origin` remote, else the shared git directory, else the directory, so
+  every harness in a repository, and its clones and worktrees, share memory.
+- `~/.memstack/config.json` (or `$MEMSTACK_HOME`) holds the LLM provider
+  and storage choice, written atomically with owner-only permissions.
+  `loadConfig()` overlays environment variables section by section, so a
+  key from one provider is never sent to another provider's URL.
+- A SQLite or Redis error other than a missing driver is reported as is,
+  instead of as "install the driver".
+
 #### Fixes
 - Auto-importance and auto-tagging no longer return empty results with
   reasoning models such as `deepseek-flash`, whose thinking used up the old

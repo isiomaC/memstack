@@ -38,6 +38,7 @@ export type { RecallQuery, RecallHit, RecallResult, LexicalRetrieverConfig } fro
 // Harness memory
 export { HarnessMemory } from "./harness/HarnessMemory.js";
 export type { HarnessMemoryConfig, RememberInput, HarnessRecallInput } from "./harness/HarnessMemory.js";
+export { GLOBAL_NAMESPACE, projectNamespace, sessionNamespace, defaultRecallNamespaces } from "./harness/namespaces.js";
 
 // Errors
 export { MemStackError, notFound, validationError, storageError, configError } from "./errors.js";
