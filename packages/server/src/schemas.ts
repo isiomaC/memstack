@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const MemoryTypeSchema = z.enum(["interaction", "summary", "observation", "fact", "reflection"]);
+export const MemoryTypeSchema = z.enum(["interaction", "summary", "observation", "fact", "reflection", "preference", "decision", "instruction"]);
 
 const isoDate = z.string().datetime({ offset: true }).or(z.string().date()).transform((s) => new Date(s));
 

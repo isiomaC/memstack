@@ -16,6 +16,14 @@
   Honored by the memory, disk, SQLite, Postgres, Redis, and Turso adapters,
   which previously always touched.
 
+- Memory types `preference`, `decision`, and `instruction`, accepted by
+  Core, the REST server, and the MCP server.
+- `HarnessMemory` provides remember, recall, get, forget, and stats for
+  agent harnesses on any storage adapter. Writes record `metadata.source`
+  provenance and ask the LLM for topic tags, storing the memory untagged if
+  tagging fails or times out. Reads and deletes are limited to the caller's
+  namespaces, and recall never calls the LLM.
+
 #### SQLite
 - `initialize()` sets `busy_timeout` (default 5000 ms, `busyTimeoutMs`) and
   WAL mode (`walMode`), so concurrent processes wait instead of failing with

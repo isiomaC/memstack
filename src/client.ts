@@ -3,6 +3,7 @@ import type { MemStackConfig, ProcessInput, MemoryStoreInput, StorageProvider } 
 import { MemoryStore } from "./memory/MemoryStore.js";
 import { InMemoryStorageAdapter } from "./adapters/storage/memory.js";
 import { configError, validationError } from "./errors.js";
+import { extractJson, parseTags } from "./enrichment.js";
 
 export class MemStack {
   readonly memory: MemoryStore;
@@ -69,7 +70,7 @@ export class MemStack {
             maxTokens: 80,
             temperature: 0,
           });
-          tags = this._parseTagsJson(result.text);
+          tags = parseTags(result.text);
         }
       } catch (err) {
         this.config.hooks?.onError?.(
@@ -205,7 +206,7 @@ export class MemStack {
     text: string
   ): { importance?: number; tags?: string[] } {
     try {
-      const json = JSON.parse(this._extractJson(text)) as Record<string, unknown>;
+      const json = JSON.parse(extractJson(text)) as Record<string, unknown>;
       const result: { importance?: number; tags?: string[] } = {};
       if (typeof json.importance === "number" && Number.isFinite(json.importance)) {
         result.importance = Math.max(0, Math.min(1, json.importance));
@@ -220,30 +221,5 @@ export class MemStack {
     } catch {
       return {};
     }
-  }
-
-  private _parseTagsJson(text: string): string[] {
-    try {
-      const parsed = JSON.parse(this._extractJson(text)) as unknown;
-      if (Array.isArray(parsed) && parsed.every((t: unknown) => typeof t === "string")) {
-        return (parsed as string[]).map((t) => t.toLowerCase().trim()).slice(0, 5);
-      }
-    } catch {
-      // Fallback: try comma-separated
-    }
-    return text
-      .split(",")
-      .map((t) => t.replace(/[\[\]"]/g, "").trim().toLowerCase())
-      .filter((t) => t.length > 0)
-      .slice(0, 5);
-  }
-
-  /** Strip markdown code fences and extract the JSON payload from LLM output. */
-  private _extractJson(text: string): string {
-    let cleaned = text.trim();
-    // Remove ```json ... ``` or ``` ... ``` fences
-    const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenceMatch) cleaned = fenceMatch[1].trim();
-    return cleaned;
   }
 }

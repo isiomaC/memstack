@@ -209,7 +209,7 @@ Every agent interaction becomes a `Memory` with metadata that controls how it's 
 interface Memory {
   id: string;
   actorId: string;               // Who this memory belongs to (user ID, agent ID, session ID)
-  memoryType: MemoryType;        // "interaction" | "summary" | "observation" | "fact" | "reflection"
+  memoryType: MemoryType;        // "interaction" | "summary" | "observation" | "fact" | "reflection" | "preference" | "decision" | "instruction"
   content: string;               // The actual text
   importance: number;            // 0-1 — higher = survives pruning, ranks higher in retrieval
   emotionalValence: number;      // -1 to 1 — for tone-aware retrieval
@@ -505,6 +505,9 @@ const userCount = await ms.memory.count({ actorId: "user-42" });
 | `observation` | Passive knowledge — facts, documents, things the agent knows but didn't interact with. | "Company refund policy is 30 days from purchase." |
 | `fact` | Verified knowledge — discrete truths the agent has confirmed. | "The user's subscription tier is Enterprise." |
 | `reflection` | Self-generated insight — the agent thinking about its own experiences. | "I tend to over-explain billing policies — should be more concise." |
+| `preference` | How the user likes things done. | "Prefer small pull requests with one concern each." |
+| `decision` | A choice made, ideally with its reason. | "Chose Hono over Express for edge runtime support." |
+| `instruction` | A standing rule to follow. | "Never commit directly to main." |
 
 Types control retrieval behavior — `compileContext()` treats `interaction` and `summary` differently from `observation`. Use types to separate "what happened" from "what I know."
 
