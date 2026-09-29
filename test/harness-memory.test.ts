@@ -74,6 +74,14 @@ describe("HarnessMemory", () => {
       expect(onError.mock.calls[0][0].message).toMatch(/timed out/);
     });
 
+    it("reports an empty reply as a tagging failure", async () => {
+      const onError = vi.fn();
+      const harness = new HarnessMemory({ storage, llm: fakeLlm("  "), onError });
+      const memory = await harness.remember({ namespace: "project:abc", content: "Uses Hono", source });
+      expect(memory.tags).toEqual([]);
+      expect(onError.mock.calls[0][0].message).toMatch(/empty reply/);
+    });
+
     it("drops malformed tags from the LLM", async () => {
       const harness = new HarnessMemory({ storage, llm: fakeLlm('["ok", "two words", "", "c++"]') });
       const memory = await harness.remember({ namespace: "project:abc", content: "Uses Hono", source });

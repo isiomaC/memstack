@@ -40,7 +40,7 @@ describe("tokenize", () => {
 
 describe("queryTerms", () => {
   it("drops stopwords, stems, and de-duplicates", () => {
-    expect(queryTerms("What framework does this project use? Frameworks!")).toEqual(["framework", "project", "us"]);
+    expect(queryTerms("What framework does this project use? Frameworks!")).toEqual(["framework", "project"]);
   });
 
   it("keeps stopwords when nothing else is left", () => {

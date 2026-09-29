@@ -57,7 +57,7 @@ summarization, and merging.
 - `memstack init` asks for a provider and API key and verifies them with a
   real request before finishing.
 - Any OpenAI-compatible provider works through the existing adapter;
-  DeepSeek (`https://api.deepseek.com`, `deepseek-chat`) is verified.
+  DeepSeek (`https://api.deepseek.com`, `deepseek-flash`) is verified.
 - Recall never calls the LLM (D7), so an LLM outage does not stop recall.
 - The existing Ollama adapter can later be exposed in `config-env` as a
   local, no-cloud option.

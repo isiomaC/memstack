@@ -122,7 +122,7 @@ import { MemStack, OpenAILLMAdapter, InMemoryStorageAdapter } from "@memstack/co
 const llm = new OpenAILLMAdapter({
   apiKey: process.env.DEEPSEEK_API_KEY!,
   baseURL: "https://api.deepseek.com/v1",
-  defaultModel: "deepseek-chat",
+  defaultModel: "deepseek-flash",
 });
 
 const memstack = new MemStack({

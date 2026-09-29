@@ -3,7 +3,7 @@ import type { MemStackConfig, ProcessInput, MemoryStoreInput, StorageProvider } 
 import { MemoryStore } from "./memory/MemoryStore.js";
 import { InMemoryStorageAdapter } from "./adapters/storage/memory.js";
 import { configError, validationError } from "./errors.js";
-import { extractJson, parseTags } from "./enrichment.js";
+import { ENRICHMENT_MAX_TOKENS, extractJson, parseTags } from "./enrichment.js";
 
 export class MemStack {
   readonly memory: MemoryStore;
@@ -46,7 +46,7 @@ export class MemStack {
             system:
               "Analyze the memory and respond with a JSON object: {\"importance\": <0.0-1.0>, \"tags\": [<array of 1-5 lowercase single-word tags>]}. Return ONLY the JSON, nothing else.",
             user: input.content,
-            maxTokens: 100,
+            maxTokens: ENRICHMENT_MAX_TOKENS,
             temperature: 0,
           });
           const parsed = this._parseEnrichmentJson(result.text);
@@ -57,7 +57,7 @@ export class MemStack {
             system:
               "Rate the importance of the following memory for an AI agent on a scale of 0.0 to 1.0, where 0.0 is trivial and 1.0 is critical. Return ONLY a single float number, nothing else.",
             user: input.content,
-            maxTokens: 10,
+            maxTokens: ENRICHMENT_MAX_TOKENS,
             temperature: 0,
           });
           const parsed = parseFloat(result.text.trim());
@@ -67,7 +67,7 @@ export class MemStack {
             system:
               "Extract 1-5 concise, lowercase, single-word tags from the following memory. Return ONLY a JSON array of strings, nothing else. Example: [\"combat\", \"goblin\", \"forest\"]",
             user: input.content,
-            maxTokens: 80,
+            maxTokens: ENRICHMENT_MAX_TOKENS,
             temperature: 0,
           });
           tags = parseTags(result.text);

@@ -2,7 +2,7 @@ import type { Memory, MemorySource, MemoryType } from "../types.js";
 import type { LLMProvider, StorageProvider } from "../interfaces.js";
 import { LexicalRetriever } from "../retrieval/LexicalRetriever.js";
 import type { RecallResult } from "../retrieval/LexicalRetriever.js";
-import { parseTags } from "../enrichment.js";
+import { ENRICHMENT_MAX_TOKENS, parseTags } from "../enrichment.js";
 import { notFound, validationError } from "../errors.js";
 
 export interface HarnessMemoryConfig {
@@ -150,9 +150,10 @@ export class HarnessMemory {
         timer = setTimeout(() => reject(new Error(`Tagging timed out after ${this.tagTimeoutMs} ms`)), this.tagTimeoutMs);
       });
       const result = await Promise.race([
-        this.llm.complete({ system: TAG_PROMPT, user: content, maxTokens: 80, temperature: 0 }),
+        this.llm.complete({ system: TAG_PROMPT, user: content, maxTokens: ENRICHMENT_MAX_TOKENS, temperature: 0 }),
         timeout,
       ]);
+      if (!result.text.trim()) throw new Error("Tagging returned an empty reply");
       return parseTags(result.text).filter((t) => /^[\p{L}\p{N}-]+$/u.test(t));
     } catch (error) {
       this.onError?.(error instanceof Error ? error : new Error(String(error)), "harness-tagging");

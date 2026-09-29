@@ -6,6 +6,8 @@ const STOPWORDS = new Set([
   "how", "i", "in", "is", "it", "its", "me", "my", "of", "on", "or", "our", "that", "the",
   "this", "to", "was", "we", "were", "what", "when", "where", "which", "who", "why",
   "with", "you", "your",
+  // Verbs that frame a question ("what do we use?") without saying what it is about.
+  "can", "could", "has", "have", "should", "use", "used", "uses", "using", "would",
 ]);
 
 /** Lowercased words, split on anything that is not a letter or digit. */

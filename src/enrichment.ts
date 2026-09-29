@@ -1,5 +1,12 @@
 // Parsing helpers for LLM enrichment output, shared by the client and harness memory.
 
+/**
+ * Token cap for enrichment calls. A ceiling, not a target: reasoning models
+ * such as deepseek-flash spend tokens thinking before they answer and return
+ * an empty reply when the cap is hit first.
+ */
+export const ENRICHMENT_MAX_TOKENS = 1024;
+
 /** Strip markdown code fences and extract the JSON payload from LLM output. */
 export function extractJson(text: string): string {
   let cleaned = text.trim();

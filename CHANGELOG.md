@@ -24,6 +24,13 @@
   tagging fails or times out. Reads and deletes are limited to the caller's
   namespaces, and recall never calls the LLM.
 
+#### Fixes
+- Auto-importance and auto-tagging no longer return empty results with
+  reasoning models such as `deepseek-flash`, whose thinking used up the old
+  10–100 token caps. Enrichment calls now allow up to 1024 tokens.
+- The DeepSeek example uses `deepseek-flash`; `deepseek-chat` is no longer
+  accepted by the DeepSeek API.
+
 #### SQLite
 - `initialize()` sets `busy_timeout` (default 5000 ms, `busyTimeoutMs`) and
   WAL mode (`walMode`), so concurrent processes wait instead of failing with
