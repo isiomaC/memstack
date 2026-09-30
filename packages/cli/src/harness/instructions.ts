@@ -1,7 +1,7 @@
 // A marked block of agent instructions in a harness's global instruction file
 // (Codex: $CODEX_HOME/AGENTS.md). Only the text between the markers is ever
 // touched; the rest of the file is kept byte for byte.
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { constants, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 const BEGIN = "<!-- memstack:begin";
@@ -68,7 +68,17 @@ function write(path: string, content: string, previous: string | null, backupDir
   renameSync(tmp, path);
 }
 
+// Never overwrites an earlier backup: two changes in the same millisecond get
+// numbered names instead of sharing one.
 function backup(path: string, backupDir: string): void {
   mkdirSync(backupDir, { recursive: true, mode: 0o700 });
-  copyFileSync(path, join(backupDir, `${basename(path)}.${new Date().toISOString().replace(/[:.]/g, "-")}`));
+  const base = join(backupDir, `${basename(path)}.${new Date().toISOString().replace(/[:.]/g, "-")}`);
+  for (let n = 0; ; n++) {
+    try {
+      copyFileSync(path, n === 0 ? base : `${base}-${n}`, constants.COPYFILE_EXCL);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+  }
 }
