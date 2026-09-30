@@ -16,6 +16,7 @@ This doc collects copy-pasteable config for as many MCP clients as we could veri
 - [Step 0: Test the server standalone before wiring up a client](#step-0-test-the-server-standalone-before-wiring-up-a-client)
 - [Universal pattern (any MCP client)](#universal-pattern-any-mcp-client)
 - [Database backends (SQLite, Postgres, Redis)](#database-backends-sqlite-postgres-redis)
+- [Harness profile (Claude Code and Codex)](#harness-profile-claude-code-and-codex)
 - [Client-specific setup](#client-specific-setup)
   - [Claude Code](#claude-code)
   - [Claude Desktop](#claude-desktop)
@@ -151,6 +152,43 @@ The database must have the [`pgvector`](https://github.com/pgvector/pgvector) ex
 ```
 
 ---
+
+## Harness profile (Claude Code and Codex)
+
+`memstack-mcp --profile harness` is a smaller server for coding agents that
+share one memory per project. It exposes five tools under their usual names,
+`memory_store`, `memory_retrieve`, `memory_get`, `memory_delete`, and
+`memory_stats`, and none of them takes an `actorId`:
+
+- **Project scoping.** The server resolves the project once, at startup, from
+  `CLAUDE_PROJECT_DIR` (set by Claude Code) or its working directory (Codex
+  starts servers in the session's directory). Clones and worktrees of the same
+  `origin` remote share one project. Recall covers the project plus global
+  memories; a memory is written as global only when the agent passes
+  `scope: "global"`.
+- **Safety.** Bulk and destructive tools (`memory_purge_actor`,
+  `memory_prune`, `memory_import`, `memory_delete_many`) are not exposed, and
+  `memory_get`/`memory_delete` refuse IDs from other projects.
+- **Recall.** Keyword ranking in MemStack, on any storage backend, with no LLM
+  call. Writes ask the LLM for topic tags so category questions ("which
+  framework?") find specific memories ("uses Hono"). If tagging fails, the
+  memory is stored untagged.
+- **Guidance.** The server sends MCP `instructions` telling the agent when to
+  recall and remember; your instruction files are not edited.
+
+Settings come from `~/.memstack/config.json` (or `$MEMSTACK_HOME/config.json`)
+overlaid with the environment variables below. Each section comes whole from
+one source: any LLM variable in the environment replaces the file's `llm`
+section, and `MEMSTACK_STORAGE` replaces its `storage` section. The profile
+supports stdio only, and it does not install your storage driver: pass it with
+`-p` as in [Database backends](#database-backends-sqlite-postgres-redis).
+
+```bash
+npx -y -p @memstack/mcp -p better-sqlite3@^11.10.0 memstack-mcp --profile harness --harness claude-code
+```
+
+`--harness` labels which agent wrote each memory; it defaults to the MCP
+client's name.
 
 ## Client-specific setup
 
@@ -473,7 +511,7 @@ Then swap `command`/`args` for:
 
 ## Environment variable reference
 
-All configuration is env vars — no config file inside memstack itself. Full detail in [`packages/mcp/README.md`](packages/mcp/README.md).
+The default profile is configured by environment variables only. The harness profile also reads `~/.memstack/config.json`, with environment variables taking precedence ([details](#harness-profile-claude-code-and-codex)). Full detail in [`packages/mcp/README.md`](packages/mcp/README.md).
 
 | Variable | Purpose | Default |
 |---|---|---|
@@ -487,7 +525,9 @@ All configuration is env vars — no config file inside memstack itself. Full de
 | `MEMSTACK_OPENAI_BASE_URL` | OpenAI-compatible endpoint override (DeepSeek, etc.) — disables embeddings | `https://api.openai.com/v1` |
 | `MEMSTACK_LLM_MODEL` | Model override | `gpt-4o-mini` |
 | `MEMSTACK_EMBED_ON_STORE` | Auto-embed on store | `true` |
-| `MEMSTACK_ACTOR` | Default actor ID (isolates memory per agent) | `default` |
+| `MEMSTACK_ACTOR` | Default actor ID (isolates memory per agent). Ignored by the harness profile | `default` |
+| `MEMSTACK_HOME` | Directory holding `config.json` for the harness profile | `~/.memstack` |
+| `CLAUDE_PROJECT_DIR` | Project directory for the harness profile; set by Claude Code | working directory |
 
 At least one of `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` is required — the server throws on startup without one (`packages/mcp/src/config.ts:14-22`).
 

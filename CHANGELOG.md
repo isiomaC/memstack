@@ -28,6 +28,14 @@
   `sessionNamespace()`, and `defaultRecallNamespaces()`. `global`,
   `project:`, and `session:` are now reserved `actorId` values.
 
+### @memstack/mcp
+- `memstack-mcp --profile harness [--harness <name>]` serves five
+  project-scoped tools (`memory_store`, `memory_retrieve`, `memory_get`,
+  `memory_delete`, `memory_stats`) with Zod-validated input, bounded output,
+  and MCP server instructions. The project comes from `CLAUDE_PROJECT_DIR` or
+  the working directory; settings come from `~/.memstack/config.json` plus
+  environment variables. The default 18-tool profile is unchanged.
+
 ### @memstack/config-env (internal)
 - `resolveProject()` derives a stable project ID from the normalized
   `origin` remote, else the shared git directory, else the directory, so

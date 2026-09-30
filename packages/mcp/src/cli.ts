@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
 import { createServer as createHttpServer } from "node:http";
-import { MemStack } from "@memstack/core";
+import { HarnessMemory, InMemoryStorageAdapter, MemStack } from "@memstack/core";
 import type { MemStackConfig } from "@memstack/core";
-import { loadConfig } from "./config.js";
+import { resolveProject } from "@memstack/config-env";
+import { loadConfig, loadHarnessConfig } from "./config.js";
 import { createServer } from "./server.js";
+import { createHarnessServer } from "./harness.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
@@ -14,8 +16,17 @@ async function main() {
     options: {
       http: { type: "boolean", default: false },
       port: { type: "string", default: "3939" },
+      profile: { type: "string", default: "default" },
+      harness: { type: "string" },
     },
   });
+
+  if (values.profile === "harness") {
+    if (values.http) throw new Error("--profile harness supports stdio only: the project comes from the harness's working directory");
+    await runHarness(values.harness);
+    return;
+  }
+  if (values.profile !== "default") throw new Error(`Unknown --profile "${values.profile}". Use "default" or "harness".`);
 
   const { config, defaultActorId } = await loadConfig();
 
@@ -28,7 +39,32 @@ async function main() {
   const server = createServer({ config, defaultActorId, ms });
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  exitWhenStdinCloses(transport, ms);
+  exitWhenStdinCloses(transport, () => ms.close());
+}
+
+/**
+ * Harness profile over stdio. Claude Code sets CLAUDE_PROJECT_DIR; Codex
+ * starts the server in the session's working directory. Either way the
+ * project is resolved once, at startup.
+ */
+async function runHarness(harness: string | undefined) {
+  const cwd = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+  const project = resolveProject(cwd);
+  const { config } = await loadHarnessConfig();
+  const storage = config.storage ?? new InMemoryStorageAdapter();
+  if (storage instanceof InMemoryStorageAdapter) {
+    console.error("memstack-mcp: storage is in-memory, so memories are lost when this session ends. Run `memstack init` to choose a store.");
+  }
+
+  const memory = new HarnessMemory({
+    storage,
+    llm: config.llm,
+    onError: (error, context) => console.error(`memstack-mcp: ${context}: ${error.message}`),
+  });
+  const server = createHarnessServer({ memory, projectId: project.id, harness, cwd: project.root });
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  exitWhenStdinCloses(transport, () => storage.close());
 }
 
 /**
@@ -36,11 +72,11 @@ async function main() {
  * answered. Open storage connections (e.g. a Postgres pool) would otherwise
  * keep the process alive after the client has gone.
  */
-function exitWhenStdinCloses(transport: StdioServerTransport, ms: MemStack) {
+function exitWhenStdinCloses(transport: StdioServerTransport, close: () => Promise<void>) {
   let pending = 0;
   let ended = false;
   const finish = () => {
-    if (ended && pending === 0) void ms.close().finally(() => process.exit(0));
+    if (ended && pending === 0) void close().finally(() => process.exit(0));
   };
 
   const onmessage = transport.onmessage;

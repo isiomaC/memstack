@@ -151,13 +151,21 @@ MCP `instructions` field to tell the harness when to recall and when to
 remember; `memstack connect` does not edit the user's instruction files.
 `memstack connect` registers this profile.
 
-Before building it, confirm that Claude Code and Codex start MCP servers
-in the project's working directory. If one does not, pass the project
-through its supported configuration instead.
+Verified 2026-09-30 against the official documentation and source:
 
-Before building this, confirm which MCP protocol versions Claude Code and
-Codex support today, and whether the installed SDK negotiates
-`2026-07-28`. Upgrade the SDK in its own change if needed.
+- Claude Code starts stdio servers in the session's working directory and
+  sets `CLAUDE_PROJECT_DIR` to the project root. It also answers
+  `roots/list`.
+- Codex starts stdio servers in the session's working directory unless the
+  server config sets `cwd` (`codex-rs/rmcp-client`, `stdio_server_launcher.rs`).
+  It does not advertise roots.
+- The harness profile therefore resolves the project from
+  `CLAUDE_PROJECT_DIR`, else its working directory, once at startup. A
+  Codex session that changes directory mid-session keeps the project it
+  started in.
+- Claude Code's client runtimes use MCP TypeScript SDK 1.x, and 2.0 for
+  protocol revision `2026-07-28`. `@memstack/mcp` uses SDK 1.29, which
+  negotiates with both, so no SDK upgrade is needed for Phase 1.
 
 ### D7. Harness memory is storage-agnostic
 
