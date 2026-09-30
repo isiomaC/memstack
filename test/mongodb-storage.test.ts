@@ -17,7 +17,7 @@ function createMockMongoCollection() {
       if (update["$set"]) {
         const existing = docs.get(id);
         if (existing) { docs.set(id, { ...existing, ...update["$set"] }); return { upsertedId: undefined }; }
-        const newDoc = { _id: id, ...update["$set"] };
+        const newDoc = { _id: id, ...(update["$setOnInsert"] as object | undefined), ...update["$set"] };
         docs.set(id, newDoc);
         return { upsertedId: id };
       }

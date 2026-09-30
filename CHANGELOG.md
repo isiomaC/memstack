@@ -14,6 +14,8 @@
 - Optional `StorageProvider` members: `capabilities` (`multiProcess`,
   `textSearch`) and a native `search()` hook. Existing adapters need no
   changes.
+  `multiProcess` is declared, and verified by two-process end-to-end tests,
+  for SQLite, Postgres, Redis, and MongoDB.
 - `retrieve({ touch: false })` reads without marking memories as accessed.
   Honored by the memory, disk, SQLite, Postgres, Redis, and Turso adapters,
   which previously always touched.
@@ -72,6 +74,12 @@
   instead of as "install the driver".
 
 #### Fixes
+- Postgres: `initialize()` no longer fails with a duplicate key in
+  `pg_type` when two processes start at once on a new database. The
+  migration runs as one block under a per-table advisory lock.
+- MongoDB: `store()` with an existing `id` now updates the memory, keeping
+  its actor, type, and creation time, as the other adapters do, instead of
+  failing with a duplicate key error.
 - Auto-importance and auto-tagging no longer return empty results with
   reasoning models such as `deepseek-flash`, whose thinking used up the old
   10–100 token caps. Enrichment calls now allow up to 1024 tokens.

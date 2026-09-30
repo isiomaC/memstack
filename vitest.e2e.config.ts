@@ -13,6 +13,7 @@ export default defineConfig({
       "e2e/lancedb.e2e.ts",
       "e2e/mongodb.e2e.ts",
       "e2e/harness-conformance.e2e.ts",
+      "e2e/multi-process.e2e.ts",
     ],
   },
 });
