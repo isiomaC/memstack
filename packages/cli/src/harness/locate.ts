@@ -1,5 +1,5 @@
 // Finds the user's own install of memstack-mcp and their storage driver.
-// MemStack never installs either (ADR 0001, D7): these checks only look.
+// MemStack never installs either: these checks only look.
 import { existsSync, realpathSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 import type { StorageType } from "@memstack/config-env";

@@ -1,4 +1,4 @@
-// Harness MCP profile (ADR 0001, D6): five tools for agent harnesses such as
+// Harness MCP profile: five tools for agent harnesses such as
 // Claude Code and Codex, scoped to the project the harness was started in.
 // Tools take no actorId, so one project can never read or delete another's
 // memories, and bulk or destructive tools are not exposed.
