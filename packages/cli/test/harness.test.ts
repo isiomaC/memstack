@@ -161,6 +161,62 @@ describe("connectHarness", () => {
   });
 });
 
+describe("instruction files", () => {
+  it("adds the block after connecting, and removes it on disconnect", async () => {
+    const h = fakeHarness();
+    const path = join(dir, "AGENTS.md");
+    h.adapter.instructions = { path, body: "Use memory_store." };
+
+    const dry = await connectHarness({ adapter: h.adapter, launch, runner: h.runner, verify: okVerify, dryRun: true, backupDir: join(dir, "b") });
+    expect(dry.plan.instructions).toEqual({ path, change: "add" });
+    expect(existsSync(path)).toBe(false);
+
+    await connectHarness({ adapter: h.adapter, launch, runner: h.runner, verify: okVerify, backupDir: join(dir, "b") });
+    expect(readFileSync(path, "utf8")).toContain("Use memory_store.");
+
+    const again = await connectHarness({ adapter: h.adapter, launch, runner: h.runner, verify: okVerify, backupDir: join(dir, "b") });
+    expect(again.changed).toBe(false);
+
+    const removed = await disconnectHarness({ adapter: h.adapter, runner: h.runner, backupDir: join(dir, "b") });
+    expect(removed.plan.instructions).toEqual({ path, change: "remove" });
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it("adds the block to an already-connected harness", async () => {
+    const h = fakeHarness(launch);
+    const path = join(dir, "AGENTS.md");
+    h.adapter.instructions = { path, body: "Use memory_store." };
+    const result = await connectHarness({ adapter: h.adapter, launch, runner: h.runner, verify: okVerify, backupDir: join(dir, "b") });
+    expect(result.changed).toBe(true);
+    expect(h.calls).toEqual([]);
+    expect(existsSync(path)).toBe(true);
+  });
+
+  it("skips the block when instructions is false", async () => {
+    const h = fakeHarness();
+    const path = join(dir, "AGENTS.md");
+    h.adapter.instructions = { path, body: "Use memory_store." };
+    const result = await connectHarness({ adapter: h.adapter, launch, runner: h.runner, verify: okVerify, instructions: false });
+    expect(result.plan.instructions).toBeUndefined();
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it("rolls back the MCP entry when the block cannot be written", async () => {
+    const h = fakeHarness();
+    writeFileSync(join(dir, "not-a-dir"), "");
+    h.adapter.instructions = { path: join(dir, "not-a-dir", "AGENTS.md"), body: "x" };
+    await expect(connectHarness({ adapter: h.adapter, launch, runner: h.runner, verify: okVerify, backupDir: join(dir, "b") })).rejects.toThrow(
+      /Could not update .*previous configuration was restored/
+    );
+    expect(h.entry()).toBeUndefined();
+  });
+
+  it("points Codex at $CODEX_HOME/AGENTS.md", () => {
+    expect(codexAdapter({ env: { CODEX_HOME: dir } }).instructions?.path).toBe(join(dir, "AGENTS.md"));
+    expect(claudeCodeAdapter({ env: { CLAUDE_CONFIG_DIR: dir } }).instructions).toBeUndefined();
+  });
+});
+
 describe("disconnectHarness", () => {
   it("removes the entry and is a no-op when already removed", async () => {
     const h = fakeHarness(launch);
@@ -231,15 +287,17 @@ describe.each([
     const runner = createRunner(env);
     const target = harnessLaunch("/opt/memstack/mcp/dist/cli.js", id);
 
-    const first = await connectHarness({ adapter, launch: target, runner, verify: okVerify });
+    const first = await connectHarness({ adapter, launch: target, runner, verify: okVerify, backupDir: join(dir, "backups") });
     expect(first.changed).toBe(true);
     expect((await adapter.inspect()).entry).toEqual(target);
 
-    const second = await connectHarness({ adapter, launch: target, runner, verify: okVerify });
+    const second = await connectHarness({ adapter, launch: target, runner, verify: okVerify, backupDir: join(dir, "backups") });
     expect(second.changed).toBe(false);
 
-    const removed = await disconnectHarness({ adapter, runner });
+    if (id === "codex") expect(readFileSync(join(dir, "AGENTS.md"), "utf8")).toContain("memstack:begin");
+    const removed = await disconnectHarness({ adapter, runner, backupDir: join(dir, "backups") });
     expect(removed.changed).toBe(true);
     expect((await adapter.inspect()).entry).toBeUndefined();
+    expect(existsSync(join(dir, "AGENTS.md"))).toBe(false);
   }, 60_000);
 });

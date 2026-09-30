@@ -96,18 +96,39 @@ Consequences of reusing `actorId`:
 
 Harness recall returns the project namespace plus `global` by default.
 
-### D3. Project identity is shared by both harnesses
+### D3. Project identity is derived from the repository, with no stored state
 
-`project-id` is a short hash of, in order of preference:
+The project ID is recomputed from the repository every time, in this order:
 
-1. the normalized `origin` remote URL (protocol, credentials, and `.git`
-   suffix removed);
-2. the absolute path of the git root;
-3. the absolute working directory.
+1. a pinned ID in `.memstack.json` at the repository root
+   (`memstack project pin <id>`), committed so the team shares it;
+2. the first commit on the main line (`git rev-list --max-parents=0
+   --first-parent HEAD`), hashed;
+3. the normalized `origin` remote, only for shallow clones, whose first
+   commit is not available;
+4. the shared git directory, for repositories without commits, so
+   worktrees still match;
+5. the working directory, outside git.
 
-Claude Code and Codex started in the same repository resolve to the same
-ID. Different clones and worktrees of the same remote share memory, and a
-monorepo is one project.
+Every clone of a repository has the same first commit, so Claude Code and
+Codex started anywhere in it agree, and the ID survives adding or renaming
+a remote, moving the folder, new machines, and switching storage. Because
+no registry is kept, moving from one store to another (for example
+Postgres to SQLite) needs only `memstack export`/`import`: memories carry
+their project in `actorId`.
+
+When a more stable source appears, such as a repository's first commit,
+memories under the earlier IDs are moved to the new one once, when the
+harness server or CLI next starts. The move uses only the storage
+contract, so it works on every adapter, and it is safe when two processes
+run it at once. `memstack project merge <old-id>` moves memories manually,
+for example after pinning.
+
+Trade-offs: a fork shares its first commit with its upstream, so on one
+store the two share memory until one is pinned; merging an unrelated
+history does not change the ID, because only the first-parent chain is
+followed. A stored project registry was rejected because it is state that
+can be lost or diverge when switching storage or machines.
 
 ### D4. Memory kinds are extended additively
 
@@ -148,8 +169,19 @@ The profile exists for isolation and safety:
 Harness tools validate input with Zod, bound results by count and
 characters, and return memory IDs with provenance. The server uses the
 MCP `instructions` field to tell the harness when to recall and when to
-remember; `memstack connect` does not edit the user's instruction files.
-`memstack connect` registers this profile.
+remember. `memstack connect` registers this profile.
+
+Live testing showed Codex gives MCP server instructions little weight: asked
+to "remember" something, it acknowledged it or wrote it into `README.md`
+instead of calling `memory_store`. `memstack connect codex` therefore also
+adds a short block, between `<!-- memstack:begin -->` and
+`<!-- memstack:end -->` markers, to `$CODEX_HOME/AGENTS.md`, which Codex
+always loads. With it, Codex saved memories for every phrasing tried. Only
+the marked block is ever changed, the file is backed up and written
+atomically, reconnecting does not duplicate it, `--dry-run` shows it,
+`--no-agents-md` skips it, and `memstack disconnect codex` removes it,
+restoring the file exactly. Claude Code follows the MCP instructions, so its
+instruction files are not edited.
 
 Verified 2026-09-30 against the official documentation and source:
 

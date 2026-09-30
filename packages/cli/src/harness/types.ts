@@ -30,6 +30,8 @@ export interface ConnectPlan {
   previous?: ServerLaunch;
   /** Entry after the change; undefined for a disconnect. */
   target?: ServerLaunch;
+  /** Instruction file change, when the harness has one and it is not skipped. */
+  instructions?: { path: string; change: "add" | "update" | "remove" | "none" };
 }
 
 /**
@@ -45,6 +47,8 @@ export interface HarnessAdapter {
   inspect(): Promise<HarnessState>;
   addSteps(launch: ServerLaunch): CommandStep[];
   removeSteps(): CommandStep[];
+  /** Global instruction file the harness always loads, when MemStack should add guidance to it. */
+  instructions?: { path: string; body: string };
 }
 
 export const SERVER_NAME = "memstack";

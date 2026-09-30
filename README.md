@@ -106,8 +106,11 @@ memstack connect claude-code
 memstack connect codex
 ```
 
-Memories are scoped to the git repository (clones and worktrees of the same
-remote share them), recall runs locally without an LLM call, and any
+Memories are scoped to the git repository by its first commit, so clones,
+worktrees, renamed remotes, and moved folders all share them (pin a name with
+`memstack project pin <id>`). For Codex, `connect` also adds a marked block to
+`~/.codex/AGENTS.md` so it saves memories when asked. Recall runs locally
+without an LLM call, and any
 supported store works: swap `better-sqlite3` for `postgres@^3.4.9` or
 `ioredis@^5.11.1` and pick that store in `memstack init`. `memstack status`,
 `memstack doctor`, and `memstack memories` show what is connected and

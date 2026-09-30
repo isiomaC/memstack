@@ -148,6 +148,28 @@ describe.skipIf(!ready)("cross-harness memory through memstack connect", () => {
     expect(doctor.code, doctor.out).toBe(0);
   }, 120_000);
 
+  it("keeps memories when the project gets its first commit, and when it is pinned", async () => {
+    const codexEntry = JSON.parse(execFileSync("codex", ["mcp", "get", "memstack", "--json"], { env, encoding: "utf8" })).transport as Launch;
+    const before = memstack("project").out;
+    expect(before).toContain("git directory (no commits yet)");
+
+    execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "first"]);
+    const afterCommit = memstack("project").out;
+    expect(afterCommit).toContain("first commit");
+    const committedId = afterCommit.match(/Project:\s+(\S+)/)![1];
+
+    // The server adopts the memories from the pre-commit ID when it starts.
+    expect(await callTool(codexEntry, repo, env, "memory_retrieve", { query: "framework" })).toContain("This project uses Hono");
+    expect(await callTool(codexEntry, repo, env, "memory_stats", {})).toMatch(new RegExp(`^Project ${committedId} .*: 2 memories\\.`));
+
+    const pinned = memstack("project", "pin", "acme-demo");
+    expect(pinned.out).toContain(`memstack project merge ${committedId}`);
+    expect(memstack("memories").out).toContain("No memories.");
+
+    expect(memstack("project", "merge", committedId).out).toContain(`Moved 2 memories from ${committedId} to acme-demo.`);
+    expect(await callTool(codexEntry, repo, env, "memory_retrieve", { query: "validation" })).toContain("Validation uses Zod");
+  }, 120_000);
+
   it("disconnects reversibly and keeps memories", () => {
     const result = memstack("disconnect", "claude-code", "codex");
     expect(result.out).toContain("✓ Disconnected Claude Code. Your memories are kept.");

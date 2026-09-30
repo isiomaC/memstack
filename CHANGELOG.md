@@ -9,6 +9,8 @@
   ranking, stemming, and prefix matching over content and tags, plus a
   bounded most-important fallback. It works on every storage adapter, needs
   no embeddings, and makes no LLM call.
+- `HarnessMemory.moveNamespace()` and `adoptProjects()` move memories between
+  namespaces on any adapter, safely when two processes run at once.
 - Optional `StorageProvider` members: `capabilities` (`multiProcess`,
   `textSearch`) and a native `search()` hook. Existing adapters need no
   changes.
@@ -46,15 +48,22 @@
   restores the previous entry on failure, and changes nothing when already
   connected. `--dry-run` shows the commands. `memstack disconnect` reverses
   it and keeps your memories.
-- `memstack status`, `memstack doctor` (`--live` tests the LLM key), and
-  `memstack memories [query] [--delete <id>]`.
+- For Codex, `connect` also adds a marked MemStack block to
+  `~/.codex/AGENTS.md` so Codex saves memories when asked; `--no-agents-md`
+  skips it, and `disconnect` removes it, restoring the file exactly.
+- `memstack status`, `memstack doctor` (`--live` tests the LLM key),
+  `memstack memories [query] [--delete <id>]`, and `memstack project`
+  (`pin <id>`, `merge <old-id>`).
 - Nothing is installed for you: when `memstack-mcp` or a storage driver is
   missing, the commands print the `npm install -g` command to run.
 
 ### @memstack/config-env (internal)
-- `resolveProject()` derives a stable project ID from the normalized
-  `origin` remote, else the shared git directory, else the directory, so
-  every harness in a repository, and its clones and worktrees, share memory.
+- `resolveProject()` derives the project ID from the repository, with no
+  stored state: a pinned ID in `.memstack.json`, else the first commit, else
+  (shallow clones) the `origin` remote, else the git directory or folder.
+  Clones, worktrees, remote changes, moves, and storage switches keep the
+  same ID. Memories stored before a repository's first commit are adopted
+  automatically.
 - `~/.memstack/config.json` (or `$MEMSTACK_HOME`) holds the LLM provider
   and storage choice, written atomically with owner-only permissions.
   `loadConfig()` overlays environment variables section by section, so a

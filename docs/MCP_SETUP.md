@@ -162,10 +162,12 @@ share one memory per project. It exposes five tools under their usual names,
 
 - **Project scoping.** The server resolves the project once, at startup, from
   `CLAUDE_PROJECT_DIR` (set by Claude Code) or its working directory (Codex
-  starts servers in the session's directory). Clones and worktrees of the same
-  `origin` remote share one project. Recall covers the project plus global
-  memories; a memory is written as global only when the agent passes
-  `scope: "global"`.
+  starts servers in the session's directory). The project ID comes from the
+  repository's first commit, so every clone and worktree shares it and it
+  survives remote changes, moves, and switching storage. Pin a name with
+  `memstack project pin <id>` (writes `.memstack.json`; commit it). Recall
+  covers the project plus global memories; a memory is written as global only
+  when the agent passes `scope: "global"`.
 - **Safety.** Bulk and destructive tools (`memory_purge_actor`,
   `memory_prune`, `memory_import`, `memory_delete_many`) are not exposed, and
   `memory_get`/`memory_delete` refuse IDs from other projects.
@@ -174,7 +176,9 @@ share one memory per project. It exposes five tools under their usual names,
   framework?") find specific memories ("uses Hono"). If tagging fails, the
   memory is stored untagged.
 - **Guidance.** The server sends MCP `instructions` telling the agent when to
-  recall and remember; your instruction files are not edited.
+  recall and remember. Codex gives those little weight, so
+  `memstack connect codex` also adds a marked block to `~/.codex/AGENTS.md`
+  (skip with `--no-agents-md`; `memstack disconnect codex` removes it).
 
 Settings come from `~/.memstack/config.json` (or `$MEMSTACK_HOME/config.json`)
 overlaid with the environment variables below. Each section comes whole from

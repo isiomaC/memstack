@@ -4,18 +4,23 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createRunner, type Runner } from "./exec.js";
+import { CODEX_INSTRUCTIONS } from "./instructions.js";
 import { SERVER_NAME, type HarnessAdapter, type HarnessState, type ServerLaunch } from "./types.js";
 
 export function codexAdapter(options: { runner?: Runner; env?: NodeJS.ProcessEnv } = {}): HarnessAdapter {
   const env = options.env ?? process.env;
   const runner = options.runner ?? createRunner(env);
   const binary = "codex";
-  const configPath = join(env.CODEX_HOME ?? join(homedir(), ".codex"), "config.toml");
+  const home = env.CODEX_HOME ?? join(homedir(), ".codex");
+  const configPath = join(home, "config.toml");
 
   return {
     id: "codex",
     displayName: "Codex",
     binary,
+    // Codex gives MCP server instructions little weight, so without this it
+    // acknowledges "remember that..." instead of calling memory_store.
+    instructions: { path: join(home, "AGENTS.md"), body: CODEX_INSTRUCTIONS },
 
     async inspect(): Promise<HarnessState> {
       const version = await runner(binary, ["--version"]);

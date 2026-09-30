@@ -9,6 +9,7 @@ import {
   HarnessMemory,
   OpenAILLMAdapter,
   defaultRecallNamespaces,
+  projectNamespace,
 } from "@memstack/core";
 import type { LLMProvider } from "@memstack/core";
 import {
@@ -18,6 +19,8 @@ import {
   loadConfig,
   memstackHome,
   mergeConfigFile,
+  PIN_FILE,
+  pinProject,
   readConfigFile,
   resolveProject,
   writeConfigFile,
@@ -38,8 +41,9 @@ import {
   sameLaunch,
   verifyServer,
 } from "./harness/index.js";
+import { readBlock, renderBlock } from "./harness/instructions.js";
 
-export const HARNESS_COMMANDS = ["init", "connect", "disconnect", "status", "doctor", "memories"] as const;
+export const HARNESS_COMMANDS = ["init", "connect", "disconnect", "status", "doctor", "memories", "project"] as const;
 
 export interface HarnessFlags {
   provider?: string;
@@ -55,6 +59,7 @@ export interface HarnessFlags {
   global?: boolean;
   limit?: string;
   delete?: string;
+  "no-agents-md"?: boolean;
 }
 
 const out = (line = "") => process.stdout.write(`${line}\n`);
@@ -73,6 +78,8 @@ export async function runHarnessCommand(command: string, args: string[], flags: 
       return doctor(flags);
     case "memories":
       return memories(args, flags);
+    case "project":
+      return projectCommand(args);
     default:
       throw new Error(`Unknown command: ${command}`);
   }
@@ -197,13 +204,22 @@ async function connect(ids: string[], flags: HarnessFlags): Promise<number> {
   for (const id of ids) {
     const adapter = harnessAdapter(id);
     const launch = harnessLaunch(mcp, adapter.id);
-    const result = await connectHarness({ adapter, launch, dryRun: flags["dry-run"] });
+    const result = await connectHarness({ adapter, launch, dryRun: flags["dry-run"], instructions: !flags["no-agents-md"] });
+    const instructions = result.plan.instructions;
     if (flags["dry-run"]) {
       out(`${adapter.displayName}: the server works (${result.verification.stats}).`);
-      out(result.plan.steps.length ? "Would run:" : "Already connected; nothing to change.");
+      const pending = result.plan.steps.length > 0 || (instructions && instructions.change !== "none");
+      out(pending ? "Would run:" : "Already connected; nothing to change.");
       for (const step of result.plan.steps) out(`  ${describeStep(step)}`);
+      if (instructions && instructions.change !== "none") {
+        out(`  ${instructions.change === "add" ? "add" : "update"} the marked MemStack block in ${instructions.path}:`);
+        for (const line of renderBlock(adapter.instructions!.body, adapter.id).trimEnd().split("\n")) out(`    ${line}`);
+      }
     } else if (result.changed) {
       out(`✓ Connected ${adapter.displayName}. ${result.verification.stats}`);
+      if (instructions && instructions.change !== "none") {
+        out(`  ${instructions.change === "add" ? "Added" : "Updated"} MemStack guidance in ${instructions.path} (between memstack:begin/end markers).`);
+      }
       out(`  ${adapter.id === "claude-code" ? "Restart Claude Code" : "Start a new Codex session"} to load MemStack.`);
     } else {
       out(`✓ ${adapter.displayName} is already connected. ${result.verification.stats}`);
@@ -217,9 +233,12 @@ async function disconnect(ids: string[], flags: HarnessFlags): Promise<number> {
   for (const id of ids) {
     const adapter = harnessAdapter(id);
     const result = await disconnectHarness({ adapter, dryRun: flags["dry-run"] });
+    const removeBlock = result.plan.instructions?.change === "remove";
     if (flags["dry-run"]) {
-      out(result.plan.steps.length ? `${adapter.displayName}: would run:` : `${adapter.displayName}: not connected; nothing to change.`);
+      const pending = result.plan.steps.length > 0 || removeBlock;
+      out(pending ? `${adapter.displayName}: would run:` : `${adapter.displayName}: not connected; nothing to change.`);
       for (const step of result.plan.steps) out(`  ${describeStep(step)}`);
+      if (removeBlock) out(`  remove the marked MemStack block from ${result.plan.instructions!.path}`);
     } else {
       out(result.changed ? `✓ Disconnected ${adapter.displayName}. Your memories are kept.` : `${adapter.displayName} was not connected.`);
     }
@@ -229,7 +248,7 @@ async function disconnect(ids: string[], flags: HarnessFlags): Promise<number> {
 
 // ── status ──
 
-const label = (name: string) => `${name}:`.padEnd(14);
+const label = (name: string) => (name ? `${name}:` : "").padEnd(14);
 
 async function status(): Promise<number> {
   const file = readConfigFile();
@@ -238,7 +257,7 @@ async function status(): Promise<number> {
   if (file?.storage) out(`${label("Storage")}${file.storage.type}${file.storage.path ? ` at ${file.storage.path}` : file.storage.url ? " (URL configured)" : ""}`);
 
   const project = resolveProject();
-  out(`${label("Project")}${project.id} (${project.source}: ${project.key})`);
+  out(`${label("Project")}${project.id} (${describeSource(project.source)}: ${project.key})`);
 
   const mcp = findMemstackMcp();
   out(`${label("Server")}${mcp ?? "memstack-mcp not installed"}`);
@@ -255,6 +274,11 @@ async function status(): Promise<number> {
     } else if (sameLaunch(state.entry, harnessLaunch(mcp, adapter.id))) line = "connected";
     else line = "connected with a different command (run `memstack connect` to update)";
     out(`${label(adapter.displayName)}${line}`);
+    if (adapter.instructions && state.installed) {
+      const block = readBlock(adapter.instructions.path);
+      const current = block === renderBlock(adapter.instructions.body, adapter.id);
+      out(`${label("")}guidance in ${adapter.instructions.path}: ${block === null ? "none" : current ? "present" : "outdated (run `memstack connect`)"}`);
+    }
   }
   return 0;
 }
@@ -312,7 +336,7 @@ async function doctor(flags: HarnessFlags): Promise<number> {
   }
 
   const project = resolveProject();
-  pass(`Project ${project.id} (${project.source}: ${project.key})`);
+  pass(`Project ${project.id} (${describeSource(project.source)}: ${project.key})`);
 
   for (const id of HARNESS_IDS) {
     const adapter = harnessAdapter(id);
@@ -335,6 +359,12 @@ async function doctor(flags: HarnessFlags): Promise<number> {
     if (missing.length > 0) fail(`${adapter.displayName} points at ${missing.join(", ")}, which no longer exists. Run: memstack connect ${id}`);
     else if (mcp && !sameLaunch(state.entry, harnessLaunch(mcp, adapter.id))) warn(`${adapter.displayName} uses a different MemStack command. Run: memstack connect ${id}`);
     else pass(`${adapter.displayName} is connected`);
+    if (adapter.instructions) {
+      const block = readBlock(adapter.instructions.path);
+      if (block === null) warn(`${adapter.displayName} has no MemStack guidance in ${adapter.instructions.path}, so it may not save memories when asked. Run: memstack connect ${id}`);
+      else if (block !== renderBlock(adapter.instructions.body, adapter.id)) warn(`MemStack guidance in ${adapter.instructions.path} is outdated. Run: memstack connect ${id}`);
+      else pass(`${adapter.displayName} guidance in ${adapter.instructions.path}`);
+    }
   }
 
   if (mcp) {
@@ -358,6 +388,7 @@ async function memories(args: string[], flags: HarnessFlags): Promise<number> {
   const memory = new HarnessMemory({ storage: config.storage, llm: config.llm, autoTags: false });
 
   try {
+    await memory.adoptProjects(project.previousIds, project.id);
     if (flags.delete) {
       await memory.forget(flags.delete, namespaces);
       out(`Deleted ${flags.delete}.`);
@@ -385,6 +416,61 @@ async function memories(args: string[], flags: HarnessFlags): Promise<number> {
     return 0;
   } finally {
     await config.storage.close();
+  }
+}
+
+// ── project ──
+
+async function projectCommand(args: string[]): Promise<number> {
+  const [sub, value] = args;
+  if (sub === "pin") {
+    if (!value) throw new Error("Name the project: memstack project pin <id>");
+    const before = resolveProject();
+    const path = pinProject(value);
+    out(`Pinned this repository to project "${value}" in ${path}. Commit it so every clone uses the same project.`);
+    if (before.id !== value) {
+      out(`Memories stored under the previous ID stay there. To move them: memstack project merge ${before.id}`);
+    }
+    return 0;
+  }
+
+  if (sub === "merge") {
+    if (!value) throw new Error("Name the old project ID: memstack project merge <old-id>");
+    const oldId = value.replace(/^project:/, "");
+    const project = resolveProject();
+    const { config } = await loadConfig();
+    if (!config.storage) throw new Error("No storage configured. Run `memstack init`.");
+    const memory = new HarnessMemory({ storage: config.storage, llm: config.llm, autoTags: false });
+    try {
+      const moved = await memory.moveNamespace(projectNamespace(oldId), projectNamespace(project.id));
+      out(`Moved ${moved} ${moved === 1 ? "memory" : "memories"} from ${oldId} to ${project.id}.`);
+    } finally {
+      await config.storage.close();
+    }
+    return 0;
+  }
+
+  if (sub) throw new Error(`Unknown subcommand "${sub}". Use: memstack project [pin <id> | merge <old-id>]`);
+
+  const project = resolveProject();
+  out(`${label("Project")}${project.id}`);
+  out(`${label("From")}${describeSource(project.source)}: ${project.key}`);
+  out(`${label("Root")}${project.root}`);
+  return 0;
+}
+
+function describeSource(source: string): string {
+  switch (source) {
+    case "pin":
+      return `pinned in ${PIN_FILE}`;
+    case "root-commit":
+      return "first commit";
+    case "remote":
+      return "origin remote (shallow clone)";
+    case "git":
+      return "git directory (no commits yet)";
+    default:
+      return "directory";
   }
 }
 

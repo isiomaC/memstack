@@ -1,4 +1,7 @@
+import { join } from "node:path";
+import { memstackHome } from "@memstack/config-env";
 import { run, type Runner } from "./exec.js";
+import { readBlock, removeBlock, renderBlock, upsertBlock } from "./instructions.js";
 import { verifyServer, type Verifier, type VerifyResult } from "./verify.js";
 import { sameLaunch, type CommandStep, type ConnectPlan, type HarnessAdapter, type ServerLaunch } from "./types.js";
 
@@ -9,6 +12,10 @@ export interface ConnectOptions {
   verify?: Verifier;
   /** Plan and verify, but change nothing. */
   dryRun?: boolean;
+  /** Add MemStack guidance to the harness's instruction file, when it has one. Default true. */
+  instructions?: boolean;
+  /** Where instruction files are backed up before a change. Default ~/.memstack/backups. */
+  backupDir?: string;
 }
 
 export interface ConnectResult {
@@ -25,7 +32,15 @@ export interface ConnectResult {
  * and any failure part-way restores the previous entry. Running it again
  * with the same launch changes nothing.
  */
-export async function connectHarness({ adapter, launch, runner = run, verify = verifyServer, dryRun }: ConnectOptions): Promise<ConnectResult> {
+export async function connectHarness({
+  adapter,
+  launch,
+  runner = run,
+  verify = verifyServer,
+  dryRun,
+  instructions = true,
+  backupDir = join(memstackHome(), "backups"),
+}: ConnectOptions): Promise<ConnectResult> {
   const state = await adapter.inspect();
   if (!state.installed) throw new Error(`${adapter.displayName} is not installed: \`${adapter.binary}\` is not on PATH.`);
 
@@ -36,25 +51,59 @@ export async function connectHarness({ adapter, launch, runner = run, verify = v
     target: launch,
     steps: alreadyConnected ? [] : [...(state.entry ? adapter.removeSteps() : []), ...adapter.addSteps(launch)],
   };
+  const block = adapter.instructions && instructions ? renderBlock(adapter.instructions.body, adapter.id) : undefined;
+  if (adapter.instructions && block) {
+    const current = readBlock(adapter.instructions.path);
+    plan.instructions = { path: adapter.instructions.path, change: current === null ? "add" : current === block ? "none" : "update" };
+  }
 
   const verification = await verify(launch);
   if (!verification.ok) {
     throw new Error(`MemStack's MCP server did not start correctly, so ${adapter.displayName} was not changed: ${verification.error}`);
   }
-  if (dryRun || alreadyConnected) return { plan, changed: false, verification };
+  if (dryRun) return { plan, changed: false, verification };
 
-  await applyWithRollback(adapter, plan, runner);
-  return { plan, changed: true, verification };
+  let changed = false;
+  if (!alreadyConnected) {
+    await applyWithRollback(adapter, plan, runner);
+    changed = true;
+  }
+  if (block && plan.instructions && plan.instructions.change !== "none") {
+    try {
+      upsertBlock(plan.instructions.path, block, backupDir);
+      changed = true;
+    } catch (error) {
+      const restored = alreadyConnected || (await restore(adapter, plan.previous, runner));
+      throw new Error(
+        `Could not update ${plan.instructions.path}: ${(error as Error).message}. ${restored ? "The previous configuration was restored." : "Restoring the previous configuration failed; run `memstack doctor`."}`,
+      );
+    }
+  }
+  return { plan, changed, verification };
 }
 
 /** Removes MemStack from a harness. Does nothing when it is not registered. */
-export async function disconnectHarness({ adapter, runner = run, dryRun }: Omit<ConnectOptions, "launch" | "verify">): Promise<{ plan: ConnectPlan; changed: boolean }> {
+export async function disconnectHarness({
+  adapter,
+  runner = run,
+  dryRun,
+  backupDir = join(memstackHome(), "backups"),
+}: Omit<ConnectOptions, "launch" | "verify" | "instructions">): Promise<{ plan: ConnectPlan; changed: boolean }> {
   const state = await adapter.inspect();
   if (!state.installed) throw new Error(`${adapter.displayName} is not installed: \`${adapter.binary}\` is not on PATH.`);
   const plan: ConnectPlan = { harness: adapter.id, previous: state.entry, steps: state.entry ? adapter.removeSteps() : [] };
-  if (dryRun || plan.steps.length === 0) return { plan, changed: false };
-  await applyWithRollback(adapter, plan, runner);
-  return { plan, changed: true };
+  if (adapter.instructions) {
+    plan.instructions = { path: adapter.instructions.path, change: readBlock(adapter.instructions.path) === null ? "none" : "remove" };
+  }
+  if (dryRun) return { plan, changed: false };
+
+  let changed = false;
+  if (plan.steps.length > 0) {
+    await applyWithRollback(adapter, plan, runner);
+    changed = true;
+  }
+  if (plan.instructions?.change === "remove") changed = removeBlock(plan.instructions.path, backupDir) || changed;
+  return { plan, changed };
 }
 
 async function applyWithRollback(adapter: HarnessAdapter, plan: ConnectPlan, runner: Runner): Promise<void> {
