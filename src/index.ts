@@ -5,6 +5,7 @@ export { MemStack } from "./client.js";
 export type {
   Memory,
   MemoryType,
+  MemorySource,
   CompiledContext,
   ProcessResult,
   MemStackSnapshot,
@@ -23,9 +24,21 @@ export type {
   LLMProvider,
   EmbeddingProvider,
   StorageProvider,
+  StorageCapabilities,
+  TextSearchQuery,
+  ScoredMemory,
   MemStackConfig,
   ProcessInput,
 } from "./interfaces.js";
+
+// Retrieval
+export { LexicalRetriever } from "./retrieval/LexicalRetriever.js";
+export type { RecallQuery, RecallHit, RecallResult, LexicalRetrieverConfig } from "./retrieval/LexicalRetriever.js";
+
+// Harness memory
+export { HarnessMemory } from "./harness/HarnessMemory.js";
+export type { HarnessMemoryConfig, RememberInput, HarnessRecallInput } from "./harness/HarnessMemory.js";
+export { GLOBAL_NAMESPACE, projectNamespace, sessionNamespace, defaultRecallNamespaces } from "./harness/namespaces.js";
 
 // Errors
 export { MemStackError, notFound, validationError, storageError, configError } from "./errors.js";

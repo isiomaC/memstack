@@ -1,5 +1,5 @@
 import type { Memory, MemoryType } from "../../types.js";
-import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "../../interfaces.js";
+import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter, StorageCapabilities } from "../../interfaces.js";
 import { storageError, notFound } from "../../errors.js";
 
 type MongoCollection = {
@@ -34,6 +34,7 @@ interface MongoDoc {
 }
 
 export class MongoDBStorageAdapter implements StorageProvider {
+  readonly capabilities: StorageCapabilities = { multiProcess: true };
   private collection: MongoCollection;
   private vectorDimensions: number;
 
@@ -85,7 +86,17 @@ export class MongoDBStorageAdapter implements StorageProvider {
       expiresAt: input.expiresAt,
       createdAt: input.createdAt ?? now,
     };
-    await this.collection.insertOne(this.toDoc(memory) as unknown as Record<string, unknown>);
+    if (input.id) {
+      // Upsert like the other adapters: an existing memory keeps its actor, type, and creation time.
+      const { _id, actorId, memoryType, createdAt, ...fields } = this.toDoc(memory);
+      await this.collection.updateOne(
+        { _id },
+        { $set: fields, $setOnInsert: { actorId, memoryType, createdAt } },
+        { upsert: true },
+      );
+    } else {
+      await this.collection.insertOne(this.toDoc(memory) as unknown as Record<string, unknown>);
+    }
     return memory;
   }
 

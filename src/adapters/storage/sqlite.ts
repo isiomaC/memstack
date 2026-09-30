@@ -1,5 +1,5 @@
 import type { Memory, MemoryType } from "../../types.js";
-import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "../../interfaces.js";
+import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter, StorageCapabilities } from "../../interfaces.js";
 import { notFound, configError } from "../../errors.js";
 
 type BetterSqlite3Db = {
@@ -10,6 +10,7 @@ type BetterSqlite3Db = {
     all(...params: unknown[]): unknown[];
   };
   close(): void;
+  inTransaction?: boolean;
 };
 
 interface SqliteMemoryRow {
@@ -32,7 +33,47 @@ export interface SQLiteStorageConfig {
   db: BetterSqlite3Db;
   tableName?: string;
   vectorDimensions?: number;
+  /** How long a write waits for another connection's lock before failing. Default 5000. */
+  busyTimeoutMs?: number;
+  /** Use write-ahead logging so readers never block and writers queue. Default true. */
+  walMode?: boolean;
 }
+
+const MIGRATIONS_TABLE = "memstack_schema_migrations";
+
+interface Migration {
+  version: number;
+  sql(table: string): string;
+}
+
+// Append-only: never edit a released migration, add a new version instead.
+const MIGRATIONS: Migration[] = [
+  {
+    version: 1,
+    sql: (t) => `
+      CREATE TABLE IF NOT EXISTS ${t} (
+        id TEXT PRIMARY KEY,
+        actor_id TEXT NOT NULL,
+        memory_type TEXT NOT NULL DEFAULT 'interaction',
+        content TEXT NOT NULL,
+        importance REAL NOT NULL DEFAULT 0.5,
+        emotional_valence REAL NOT NULL DEFAULT 0,
+        tags TEXT NOT NULL DEFAULT '[]',
+        embedding TEXT,
+        source_id TEXT,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        expires_at TEXT,
+        created_at TEXT NOT NULL,
+        touched_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_${t}_actor ON ${t}(actor_id);
+      CREATE INDEX IF NOT EXISTS idx_${t}_created ON ${t}(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_${t}_importance ON ${t}(importance DESC);
+    `,
+  },
+];
+
+export const SQLITE_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
 
 function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length === 0 || b.length === 0) return 0;
@@ -50,9 +91,12 @@ function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 export class SQLiteStorageAdapter implements StorageProvider {
+  readonly capabilities: StorageCapabilities = { multiProcess: true };
   private db: BetterSqlite3Db;
   private table: string;
   private vectorDimensions: number;
+  private busyTimeoutMs: number;
+  private walMode: boolean;
 
   constructor(config: SQLiteStorageConfig) {
     if (!config.db) {
@@ -64,29 +108,66 @@ export class SQLiteStorageAdapter implements StorageProvider {
       throw configError(`Invalid table name: "${this.table}". Use only alphanumeric characters and underscores.`);
     }
     this.vectorDimensions = config.vectorDimensions ?? 1536;
+    this.busyTimeoutMs = config.busyTimeoutMs ?? 5000;
+    if (!Number.isInteger(this.busyTimeoutMs) || this.busyTimeoutMs < 0) {
+      throw configError(`Invalid busyTimeoutMs: ${config.busyTimeoutMs}. Use a non-negative integer.`);
+    }
+    this.walMode = config.walMode ?? true;
   }
 
   async initialize(): Promise<void> {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS ${this.table} (
-        id TEXT PRIMARY KEY,
-        actor_id TEXT NOT NULL,
-        memory_type TEXT NOT NULL DEFAULT 'interaction',
-        content TEXT NOT NULL,
-        importance REAL NOT NULL DEFAULT 0.5,
-        emotional_valence REAL NOT NULL DEFAULT 0,
-        tags TEXT NOT NULL DEFAULT '[]',
-        embedding TEXT,
-        source_id TEXT,
-        metadata TEXT NOT NULL DEFAULT '{}',
-        expires_at TEXT,
-        created_at TEXT NOT NULL,
-        touched_at TEXT NOT NULL
-      )
-    `);
-    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_${this.table}_actor ON ${this.table}(actor_id)`);
-    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_${this.table}_created ON ${this.table}(created_at DESC)`);
-    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_${this.table}_importance ON ${this.table}(importance DESC)`);
+    // Set the timeout first so switching to WAL also waits for other connections.
+    this.db.exec(`PRAGMA busy_timeout = ${this.busyTimeoutMs}`);
+    if (this.walMode) this.db.exec("PRAGMA journal_mode = WAL");
+    this.migrate();
+  }
+
+  /** Schema version applied to this adapter's table, 0 if none. */
+  schemaVersion(): number {
+    const row = this.db.prepare(
+      `SELECT version FROM ${MIGRATIONS_TABLE} WHERE table_name = ?`
+    ).get(this.table) as { version: number } | undefined;
+    return row?.version ?? 0;
+  }
+
+  // Versions are tracked per table rather than with PRAGMA user_version,
+  // so adapters with different table names can share one database file.
+  private migrate(): void {
+    for (const migration of MIGRATIONS) {
+      this.transaction(() => {
+        this.db.exec(
+          `CREATE TABLE IF NOT EXISTS ${MIGRATIONS_TABLE} (table_name TEXT PRIMARY KEY, version INTEGER NOT NULL)`
+        );
+        // Re-read inside the write lock: another process may have just applied it.
+        if (this.schemaVersion() >= migration.version) return;
+        this.db.exec(migration.sql(this.table));
+        this.db.prepare(
+          `INSERT INTO ${MIGRATIONS_TABLE} (table_name, version) VALUES (?, ?)
+           ON CONFLICT(table_name) DO UPDATE SET version = excluded.version`
+        ).run(this.table, migration.version);
+      });
+    }
+  }
+
+  // BEGIN IMMEDIATE takes the write lock up front, so a concurrent writer
+  // waits on busy_timeout instead of failing when it upgrades a read lock.
+  private transaction<T>(fn: () => T): T {
+    if (this.db.inTransaction) return fn();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const result = fn();
+      this.db.exec("COMMIT");
+      return result;
+    } catch (error) {
+      if (this.db.inTransaction !== false) {
+        try {
+          this.db.exec("ROLLBACK");
+        } catch {
+          // SQLite already rolled back; surface the original error.
+        }
+      }
+      throw error;
+    }
   }
 
   generateId(): string {
@@ -94,6 +175,10 @@ export class SQLiteStorageAdapter implements StorageProvider {
   }
 
   async store(input: MemoryStoreInput): Promise<Memory> {
+    return this.insert(input);
+  }
+
+  private insert(input: MemoryStoreInput): Memory {
     const now = new Date().toISOString();
     const id = input.id ?? this.generateId();
 
@@ -143,11 +228,7 @@ export class SQLiteStorageAdapter implements StorageProvider {
   }
 
   async storeBatch(inputs: MemoryStoreInput[]): Promise<Memory[]> {
-    const results: Memory[] = [];
-    for (const input of inputs) {
-      results.push(await this.store(input));
-    }
-    return results;
+    return this.transaction(() => inputs.map((input) => this.insert(input)));
   }
 
   async get(id: string): Promise<Memory | null> {
@@ -201,8 +282,6 @@ export class SQLiteStorageAdapter implements StorageProvider {
       params.push(query.createdBefore.toISOString());
     }
 
-    const where = `WHERE ${conditions.join(" AND ")}`;
-
     const hasSemantic = (query.strategy === "semantic" || query.strategy === "hybrid") && embedding && embedding.length > 0;
 
     let orderBy: string;
@@ -225,10 +304,8 @@ export class SQLiteStorageAdapter implements StorageProvider {
     }
 
     const limit = query.limit ?? 10;
-    const sql = `SELECT * FROM ${this.table} ${where} ORDER BY ${orderBy}`;
-    const rows = this.db.prepare(sql).all(...params) as SqliteMemoryRow[];
-
-    let results: SqliteMemoryRow[] = rows;
+    const sql = `SELECT * FROM ${this.table} WHERE ${conditions.join(" AND ")} ORDER BY ${orderBy}`;
+    let results = this.db.prepare(sql).all(...params) as SqliteMemoryRow[];
 
     if (query.query) {
       const q = query.query.toLowerCase();
@@ -256,19 +333,13 @@ export class SQLiteStorageAdapter implements StorageProvider {
         scored.sort((a, b) => (b.score + b.row.importance) - (a.score + a.row.importance));
       }
 
-      const topK = scored.slice(0, limit);
-      for (const { row } of topK) {
-        this.db.prepare(`UPDATE ${this.table} SET touched_at = ? WHERE id = ?`).run(new Date().toISOString(), row.id);
-      }
-      return topK.map(({ row }) => this._rowToMemory(row));
+      const topK = scored.slice(0, limit).map(({ row }) => row);
+      this.touchRows(topK, query.touch);
+      return topK.map((row) => this._rowToMemory(row));
     }
 
-    const now = new Date().toISOString();
     const limited = results.slice(0, limit);
-    for (const row of limited) {
-      this.db.prepare(`UPDATE ${this.table} SET touched_at = ? WHERE id = ?`).run(now, row.id);
-    }
-
+    this.touchRows(limited, query.touch);
     return limited.map((r) => this._rowToMemory(r));
   }
 
@@ -307,6 +378,15 @@ export class SQLiteStorageAdapter implements StorageProvider {
 
   async close(): Promise<void> {
     this.db.close();
+  }
+
+  private touchRows(rows: SqliteMemoryRow[], touch: boolean | undefined): void {
+    if (touch === false || rows.length === 0) return;
+    const now = new Date().toISOString();
+    const stmt = this.db.prepare(`UPDATE ${this.table} SET touched_at = ? WHERE id = ?`);
+    this.transaction(() => {
+      for (const row of rows) stmt.run(now, row.id);
+    });
   }
 
   private _rowToMemory(row: SqliteMemoryRow): Memory {

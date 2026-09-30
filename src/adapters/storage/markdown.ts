@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile, appendFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Memory, MemoryType } from "../../types.js";
-import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "../../interfaces.js";
+import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter, StorageCapabilities } from "../../interfaces.js";
 import { storageError, notFound } from "../../errors.js";
 
 export interface MarkdownStorageConfig {
@@ -10,6 +10,7 @@ export interface MarkdownStorageConfig {
 }
 
 export class MarkdownStorageAdapter implements StorageProvider {
+  readonly capabilities: StorageCapabilities = { multiProcess: false };
   private dir: string;
   private oneFilePerActor: boolean;
   private _cache: Map<string, Memory> | null = null;

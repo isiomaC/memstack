@@ -1,5 +1,100 @@
 # Changelog
 
+## Unreleased
+
+### @memstack/core
+
+#### New features
+- `LexicalRetriever` recalls memories across several actors with BM25
+  ranking, stemming, and prefix matching over content and tags, plus a
+  bounded most-important fallback. It works on every storage adapter, needs
+  no embeddings, and makes no LLM call.
+- `HarnessMemory.moveNamespace()` and `adoptProjects()` move memories between
+  namespaces on any adapter, safely when two processes run at once.
+- Optional `StorageProvider` members: `capabilities` (`multiProcess`,
+  `textSearch`) and a native `search()` hook. Existing adapters need no
+  changes.
+  `multiProcess` is declared, and verified by two-process end-to-end tests,
+  for SQLite, Postgres, Redis, and MongoDB.
+- `retrieve({ touch: false })` reads without marking memories as accessed.
+  Honored by the memory, disk, SQLite, Postgres, Redis, and Turso adapters,
+  which previously always touched.
+
+- Memory types `preference`, `decision`, and `instruction`, accepted by
+  Core, the REST server, and the MCP server.
+- `HarnessMemory` provides remember, recall, get, forget, and stats for
+  agent harnesses on any storage adapter. Writes record `metadata.source`
+  provenance and ask the LLM for topic tags, storing the memory untagged if
+  tagging fails or times out. Reads and deletes are limited to the caller's
+  namespaces, and recall never calls the LLM.
+
+- Harness namespace helpers: `GLOBAL_NAMESPACE`, `projectNamespace()`,
+  `sessionNamespace()`, and `defaultRecallNamespaces()`. `global`,
+  `project:`, and `session:` are now reserved `actorId` values.
+
+### @memstack/mcp
+- `memstack-mcp --profile harness [--harness <name>]` serves five
+  project-scoped tools (`memory_store`, `memory_retrieve`, `memory_get`,
+  `memory_delete`, `memory_stats`) with Zod-validated input, bounded output,
+  and MCP server instructions. The project comes from `CLAUDE_PROJECT_DIR` or
+  the working directory; settings come from `~/.memstack/config.json` plus
+  environment variables. The default 18-tool profile is unchanged.
+
+### @memstack/cli
+- `memstack init` chooses an LLM provider and store, verifies the key with a
+  real request, and writes `~/.memstack/config.json`. The key can come from
+  a hidden prompt or `--api-key-env <VAR>`, never a command-line argument.
+- `memstack connect claude-code|codex` registers your installed
+  `memstack-mcp` with the harness through its own `mcp` commands. It starts
+  and checks the server first, confirms the harness reads the new entry,
+  restores the previous entry on failure, and changes nothing when already
+  connected. `--dry-run` shows the commands. `memstack disconnect` reverses
+  it and keeps your memories.
+- For Codex, `connect` also adds a marked MemStack block to
+  `~/.codex/AGENTS.md` so Codex saves memories when asked; `--no-agents-md`
+  skips it, and `disconnect` removes it, restoring the file exactly.
+- `memstack status`, `memstack doctor` (`--live` tests the LLM key),
+  `memstack memories [query] [--delete <id>]`, and `memstack project`
+  (`pin <id>`, `merge <old-id>`).
+- Nothing is installed for you: when `memstack-mcp` or a storage driver is
+  missing, the commands print the `npm install -g` command to run.
+
+### @memstack/config-env (internal)
+- `resolveProject()` derives the project ID from the repository, with no
+  stored state: a pinned ID in `.memstack.json`, else the first commit, else
+  (shallow clones) the `origin` remote, else the git directory or folder.
+  Clones, worktrees, remote changes, moves, and storage switches keep the
+  same ID. Memories stored before a repository's first commit are adopted
+  automatically.
+- `~/.memstack/config.json` (or `$MEMSTACK_HOME`) holds the LLM provider
+  and storage choice, written atomically with owner-only permissions.
+  `loadConfig()` overlays environment variables section by section, so a
+  key from one provider is never sent to another provider's URL.
+- A SQLite or Redis error other than a missing driver is reported as is,
+  instead of as "install the driver".
+
+#### Fixes
+- Postgres: `initialize()` no longer fails with a duplicate key in
+  `pg_type` when two processes start at once on a new database. The
+  migration runs as one block under a per-table advisory lock.
+- MongoDB: `store()` with an existing `id` now updates the memory, keeping
+  its actor, type, and creation time, as the other adapters do, instead of
+  failing with a duplicate key error.
+- Auto-importance and auto-tagging no longer return empty results with
+  reasoning models such as `deepseek-flash`, whose thinking used up the old
+  10–100 token caps. Enrichment calls now allow up to 1024 tokens.
+- The DeepSeek example uses `deepseek-flash`; `deepseek-chat` is no longer
+  accepted by the DeepSeek API.
+
+#### SQLite
+- `initialize()` sets `busy_timeout` (default 5000 ms, `busyTimeoutMs`) and
+  WAL mode (`walMode`), so concurrent processes wait instead of failing with
+  `SQLITE_BUSY`.
+- Schema changes are applied as numbered migrations tracked per table in
+  `memstack_schema_migrations`. Existing databases are adopted unchanged.
+- `storeBatch()` is atomic, and retrieval updates access times in one
+  transaction.
+
 ## v0.7.3
 
 ### @memstack/mcp

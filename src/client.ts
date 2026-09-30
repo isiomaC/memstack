@@ -3,6 +3,7 @@ import type { MemStackConfig, ProcessInput, MemoryStoreInput, StorageProvider } 
 import { MemoryStore } from "./memory/MemoryStore.js";
 import { InMemoryStorageAdapter } from "./adapters/storage/memory.js";
 import { configError, validationError } from "./errors.js";
+import { ENRICHMENT_MAX_TOKENS, extractJson, parseTags } from "./enrichment.js";
 
 export class MemStack {
   readonly memory: MemoryStore;
@@ -45,7 +46,7 @@ export class MemStack {
             system:
               "Analyze the memory and respond with a JSON object: {\"importance\": <0.0-1.0>, \"tags\": [<array of 1-5 lowercase single-word tags>]}. Return ONLY the JSON, nothing else.",
             user: input.content,
-            maxTokens: 100,
+            maxTokens: ENRICHMENT_MAX_TOKENS,
             temperature: 0,
           });
           const parsed = this._parseEnrichmentJson(result.text);
@@ -56,7 +57,7 @@ export class MemStack {
             system:
               "Rate the importance of the following memory for an AI agent on a scale of 0.0 to 1.0, where 0.0 is trivial and 1.0 is critical. Return ONLY a single float number, nothing else.",
             user: input.content,
-            maxTokens: 10,
+            maxTokens: ENRICHMENT_MAX_TOKENS,
             temperature: 0,
           });
           const parsed = parseFloat(result.text.trim());
@@ -66,10 +67,10 @@ export class MemStack {
             system:
               "Extract 1-5 concise, lowercase, single-word tags from the following memory. Return ONLY a JSON array of strings, nothing else. Example: [\"combat\", \"goblin\", \"forest\"]",
             user: input.content,
-            maxTokens: 80,
+            maxTokens: ENRICHMENT_MAX_TOKENS,
             temperature: 0,
           });
-          tags = this._parseTagsJson(result.text);
+          tags = parseTags(result.text);
         }
       } catch (err) {
         this.config.hooks?.onError?.(
@@ -205,7 +206,7 @@ export class MemStack {
     text: string
   ): { importance?: number; tags?: string[] } {
     try {
-      const json = JSON.parse(this._extractJson(text)) as Record<string, unknown>;
+      const json = JSON.parse(extractJson(text)) as Record<string, unknown>;
       const result: { importance?: number; tags?: string[] } = {};
       if (typeof json.importance === "number" && Number.isFinite(json.importance)) {
         result.importance = Math.max(0, Math.min(1, json.importance));
@@ -220,30 +221,5 @@ export class MemStack {
     } catch {
       return {};
     }
-  }
-
-  private _parseTagsJson(text: string): string[] {
-    try {
-      const parsed = JSON.parse(this._extractJson(text)) as unknown;
-      if (Array.isArray(parsed) && parsed.every((t: unknown) => typeof t === "string")) {
-        return (parsed as string[]).map((t) => t.toLowerCase().trim()).slice(0, 5);
-      }
-    } catch {
-      // Fallback: try comma-separated
-    }
-    return text
-      .split(",")
-      .map((t) => t.replace(/[\[\]"]/g, "").trim().toLowerCase())
-      .filter((t) => t.length > 0)
-      .slice(0, 5);
-  }
-
-  /** Strip markdown code fences and extract the JSON payload from LLM output. */
-  private _extractJson(text: string): string {
-    let cleaned = text.trim();
-    // Remove ```json ... ``` or ``` ... ``` fences
-    const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenceMatch) cleaned = fenceMatch[1].trim();
-    return cleaned;
   }
 }

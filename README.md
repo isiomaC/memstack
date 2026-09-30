@@ -1,7 +1,5 @@
 # MemStack
 
-> Implementation priority is maintained in the [canonical roadmap](docs/ROADMAP.md).
-
 > The open-source memory layer for AI agents — store, retrieve, summarize, and prune.
 
 [![npm version](https://img.shields.io/npm/v/@memstack/core)](https://www.npmjs.com/package/@memstack/core)
@@ -94,6 +92,30 @@ Think of it as the open-source alternative to [Mem0](https://mem0.ai/) — plugg
 
 ## Quick Start
 
+### Claude Code and Codex
+
+Persistent memory across agent harnesses: what you tell Claude Code, Codex
+recalls in the same project, and the reverse.
+
+```bash
+npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0  # MemStack never installs storage drivers for you
+memstack init                  # choose an LLM provider and a store
+memstack connect claude-code
+memstack connect codex
+```
+
+Memories are scoped to the git repository by its first commit, so clones,
+worktrees, renamed remotes, and moved folders all share them (pin a name with
+`memstack project pin <id>`). For Codex, `connect` also adds a marked block to
+`~/.codex/AGENTS.md` so it saves memories when asked. Recall runs locally
+without an LLM call, and any
+supported store works: swap `better-sqlite3` for `postgres@^3.4.9` or
+`ioredis@^5.11.1` and pick that store in `memstack init`. `memstack status`,
+`memstack doctor`, and `memstack memories` show what is connected and
+stored. See [the harness profile](docs/MCP_SETUP.md#harness-profile-claude-code-and-codex).
+
+### As a library
+
 ```bash
 npm install @memstack/core
 ```
@@ -122,7 +144,7 @@ import { MemStack, OpenAILLMAdapter, InMemoryStorageAdapter } from "@memstack/co
 const llm = new OpenAILLMAdapter({
   apiKey: process.env.DEEPSEEK_API_KEY!,
   baseURL: "https://api.deepseek.com/v1",
-  defaultModel: "deepseek-chat",
+  defaultModel: "deepseek-flash",
 });
 
 const memstack = new MemStack({
@@ -209,7 +231,7 @@ Every agent interaction becomes a `Memory` with metadata that controls how it's 
 interface Memory {
   id: string;
   actorId: string;               // Who this memory belongs to (user ID, agent ID, session ID)
-  memoryType: MemoryType;        // "interaction" | "summary" | "observation" | "fact" | "reflection"
+  memoryType: MemoryType;        // "interaction" | "summary" | "observation" | "fact" | "reflection" | "preference" | "decision" | "instruction"
   content: string;               // The actual text
   importance: number;            // 0-1 — higher = survives pruning, ranks higher in retrieval
   emotionalValence: number;      // -1 to 1 — for tone-aware retrieval
@@ -505,6 +527,9 @@ const userCount = await ms.memory.count({ actorId: "user-42" });
 | `observation` | Passive knowledge — facts, documents, things the agent knows but didn't interact with. | "Company refund policy is 30 days from purchase." |
 | `fact` | Verified knowledge — discrete truths the agent has confirmed. | "The user's subscription tier is Enterprise." |
 | `reflection` | Self-generated insight — the agent thinking about its own experiences. | "I tend to over-explain billing policies — should be more concise." |
+| `preference` | How the user likes things done. | "Prefer small pull requests with one concern each." |
+| `decision` | A choice made, ideally with its reason. | "Chose Hono over Express for edge runtime support." |
+| `instruction` | A standing rule to follow. | "Never commit directly to main." |
 
 Types control retrieval behavior — `compileContext()` treats `interaction` and `summary` differently from `observation`. Use types to separate "what happened" from "what I know."
 
@@ -533,6 +558,29 @@ await ms.memory.retrieve({ actorId: "x", query: "login bug", strategy: "hybrid" 
 - Use `important` for long-running agents where signal-to-noise matters
 - Use `semantic` for RAG, document search, knowledge base queries
 - Use `hybrid` for most agent memory — it balances meaning with significance
+
+### Keyword recall on any storage adapter
+
+`LexicalRetriever` answers natural questions without embeddings or an LLM
+call, and behaves the same on every storage adapter. It loads the memories
+in the given actors through `retrieve()`, then ranks them in MemStack with
+BM25 over content and tags, with stemming and prefix matching. When nothing
+matches, it returns the most important memories instead.
+
+```typescript
+import { LexicalRetriever } from "@memstack/core";
+
+const retriever = new LexicalRetriever(storage);
+const { hits, fallback } = await retriever.recall({
+  actorIds: ["project:abc", "global"], // Searched together
+  query: "What framework does this project use?",
+  limit: 10,                           // Max results
+  maxChars: 8000,                      // Max total content; the top hit is always returned
+});
+```
+
+Up to 2,000 memories per actor are ranked (`candidateLimit`). Only returned
+memories are marked as accessed.
 
 ---
 
@@ -934,6 +982,19 @@ const ms = new MemStack({
 ### Custom Storage
 
 Implement `StorageProvider` for any database. The interface is 9 methods. See the reference section above for the full contract.
+
+Optional members, none of them required:
+
+- `capabilities: { multiProcess?, textSearch? }` declares whether several
+  processes can share the store safely and whether `search()` is native.
+- `search(query)` provides native full-text search. `LexicalRetriever` uses
+  it when `textSearch` is declared and ranks memories itself otherwise.
+- `retrieve()` should honor `touch: false` by returning memories without
+  marking them as accessed.
+
+`SQLiteStorageAdapter` enables WAL and a 5-second busy timeout so several
+processes can share one database file. Set `walMode: false` or
+`busyTimeoutMs` to change this.
 
 ### Custom LLM / Embedding
 

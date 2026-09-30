@@ -224,12 +224,14 @@ export class TursoStorageAdapter implements StorageProvider {
 
     const { rows } = await this.client.execute(sql, params);
 
-    for (const row of rows.slice(0, limit)) {
-      const r = row as TursoMemoryRow;
-      await this.client.execute(
-        `UPDATE ${this.table} SET touched_at = ? WHERE id = ?`,
-        [new Date().toISOString(), r.id]
-      );
+    if (query.touch !== false) {
+      for (const row of rows.slice(0, limit)) {
+        const r = row as TursoMemoryRow;
+        await this.client.execute(
+          `UPDATE ${this.table} SET touched_at = ? WHERE id = ?`,
+          [new Date().toISOString(), r.id]
+        );
+      }
     }
 
     return (rows as TursoMemoryRow[]).map((r) => this._rowToMemory(r));
@@ -313,12 +315,14 @@ export class TursoStorageAdapter implements StorageProvider {
 
     const { rows } = await this.client.execute(sql, allParams);
 
-    for (const row of rows.slice(0, limit)) {
-      const r = row as TursoMemoryRow;
-      await this.client.execute(
-        `UPDATE ${this.table} SET touched_at = ? WHERE id = ?`,
-        [new Date().toISOString(), r.id]
-      );
+    if (query.touch !== false) {
+      for (const row of rows.slice(0, limit)) {
+        const r = row as TursoMemoryRow;
+        await this.client.execute(
+          `UPDATE ${this.table} SET touched_at = ? WHERE id = ?`,
+          [new Date().toISOString(), r.id]
+        );
+      }
     }
 
     return (rows as TursoMemoryRow[]).map((r) => this._rowToMemory(r));

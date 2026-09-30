@@ -58,6 +58,8 @@ export interface MemoryRetrieveQuery {
   strategy?: "semantic" | "hybrid" | "recent" | "important";
   createdAfter?: Date;
   createdBefore?: Date;
+  /** Mark returned memories as accessed. Default true. Set false to read without side effects. */
+  touch?: boolean;
 }
 
 export interface ContextOptions {
@@ -125,7 +127,33 @@ export interface EmbeddingProvider {
   maxBatchSize?: number;
 }
 
+/** What a storage adapter can do beyond the required contract. Unset means unknown. */
+export interface StorageCapabilities {
+  /** Several processes can read and write the same store at once without errors or lost writes. */
+  multiProcess?: boolean;
+  /** The adapter implements `search()` with native full-text search. */
+  textSearch?: boolean;
+}
+
+export interface TextSearchQuery {
+  /** Namespaces to search, matched exactly against `actorId`. */
+  actorIds: string[];
+  query: string;
+  memoryTypes?: MemoryType[];
+  limit: number;
+}
+
+export interface ScoredMemory {
+  memory: Memory;
+  /** Higher is more relevant. Only comparable within one result set. */
+  score: number;
+}
+
 export interface StorageProvider {
+  /** Optional capability flags, used by harness setup and diagnostics. */
+  readonly capabilities?: StorageCapabilities;
+  /** Optional native full-text search. Core ranks memories itself when absent. */
+  search?(query: TextSearchQuery): Promise<ScoredMemory[]>;
   initialize(): Promise<void>;
   store(memory: MemoryStoreInput): Promise<Memory>;
   storeBatch(memories: MemoryStoreInput[]): Promise<Memory[]>;

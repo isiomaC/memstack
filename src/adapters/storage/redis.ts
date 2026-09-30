@@ -1,5 +1,5 @@
 import type { Memory, MemoryType } from "../../types.js";
-import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "../../interfaces.js";
+import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter, StorageCapabilities } from "../../interfaces.js";
 import { notFound } from "../../errors.js";
 
 type RedisClient = {
@@ -22,6 +22,7 @@ export interface RedisStorageConfig {
 }
 
 export class RedisStorageAdapter implements StorageProvider {
+  readonly capabilities: StorageCapabilities = { multiProcess: true };
   private redis: RedisClient;
   private prefix: string;
   constructor(config: RedisStorageConfig) {
@@ -186,11 +187,13 @@ export class RedisStorageAdapter implements StorageProvider {
         break;
     }
 
-    const nowStr = new Date().toISOString();
-    const toTouch = results.slice(0, query.limit ?? 10);
-    for (const r of toTouch) {
-      r._touchedAt = nowStr;
-      await this.redis.set(this._memKey(r.id), JSON.stringify(r));
+    if (query.touch !== false) {
+      const nowStr = new Date().toISOString();
+      const toTouch = results.slice(0, query.limit ?? 10);
+      for (const r of toTouch) {
+        r._touchedAt = nowStr;
+        await this.redis.set(this._memKey(r.id), JSON.stringify(r));
+      }
     }
 
     const limit = query.limit ?? 10;

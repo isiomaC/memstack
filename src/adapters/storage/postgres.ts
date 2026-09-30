@@ -1,5 +1,5 @@
 import type { Memory, MemoryType } from "../../types.js";
-import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter } from "../../interfaces.js";
+import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter, StorageCapabilities } from "../../interfaces.js";
 import { notFound, configError } from "../../errors.js";
 
 type PgPool = {
@@ -33,6 +33,7 @@ export interface PostgresStorageConfig {
 }
 
 export class PostgresStorageAdapter implements StorageProvider {
+  readonly capabilities: StorageCapabilities = { multiProcess: true };
   private pool!: PgPool;
   private table: string;
   private vectorDimensions: number;
@@ -114,32 +115,52 @@ export class PostgresStorageAdapter implements StorageProvider {
     return connStr;
   }
 
+  // One DO block, so it runs in a single transaction on one connection: the
+  // advisory lock makes processes that start together (Claude Code and Codex)
+  // migrate one at a time instead of racing on CREATE ... IF NOT EXISTS,
+  // which Postgres reports as a duplicate key in pg_type.
   private async _runMigration(): Promise<void> {
-    try { await this.pool.query("CREATE EXTENSION IF NOT EXISTS vector"); } catch { /* pgvector may not be available */ }
     await this.pool.query(`
-      CREATE TABLE IF NOT EXISTS ${this.table} (
-        id TEXT PRIMARY KEY,
-        actor_id TEXT NOT NULL,
-        memory_type TEXT NOT NULL DEFAULT 'interaction',
-        content TEXT NOT NULL,
-        importance REAL NOT NULL DEFAULT 0.5,
-        emotional_valence REAL NOT NULL DEFAULT 0,
-        tags JSONB NOT NULL DEFAULT '[]',
-        embedding vector(${this.vectorDimensions}),
-        source_id TEXT,
-        metadata JSONB NOT NULL DEFAULT '{}',
-        expires_at TIMESTAMPTZ,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        touched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
+      DO $memstack$
+      BEGIN
+        PERFORM pg_advisory_xact_lock(hashtext('memstack:migrate:${this.table}'));
+        BEGIN
+          CREATE EXTENSION IF NOT EXISTS vector;
+        EXCEPTION WHEN OTHERS THEN
+          NULL; -- pgvector may not be available
+        END;
+        CREATE TABLE IF NOT EXISTS ${this.table} (
+          id TEXT PRIMARY KEY,
+          actor_id TEXT NOT NULL,
+          memory_type TEXT NOT NULL DEFAULT 'interaction',
+          content TEXT NOT NULL,
+          importance REAL NOT NULL DEFAULT 0.5,
+          emotional_valence REAL NOT NULL DEFAULT 0,
+          tags JSONB NOT NULL DEFAULT '[]',
+          embedding vector(${this.vectorDimensions}),
+          source_id TEXT,
+          metadata JSONB NOT NULL DEFAULT '{}',
+          expires_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          touched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        BEGIN
+          CREATE INDEX IF NOT EXISTS idx_${this.table}_actor ON ${this.table} (actor_id);
+          CREATE INDEX IF NOT EXISTS idx_${this.table}_created ON ${this.table} (created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_${this.table}_importance ON ${this.table} (importance DESC);
+        EXCEPTION WHEN OTHERS THEN
+          NULL; -- index creation may fail; non-critical
+        END;
+        BEGIN
+          CREATE INDEX IF NOT EXISTS idx_${this.table}_embedding ON ${this.table} USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+        EXCEPTION WHEN OTHERS THEN
+          NULL; -- index creation may fail; non-critical
+        END;
+      END
+      $memstack$
     `);
-    try {
-      await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_${this.table}_actor ON ${this.table} (actor_id)`);
-      await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_${this.table}_created ON ${this.table} (created_at DESC)`);
-      await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_${this.table}_importance ON ${this.table} (importance DESC)`);
-      await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_${this.table}_embedding ON ${this.table} USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)`);
-    } catch { /* index creation may fail; non-critical */ }
   }
+
 
   generateId(): string {
     return `mem_${Date.now().toString(36)}_${crypto.randomUUID().slice(0, 8)}`;
@@ -289,9 +310,11 @@ export class PostgresStorageAdapter implements StorageProvider {
 
     const { rows } = await this.pool.query(sql, params);
 
-    for (const row of rows.slice(0, limit)) {
-      const r = row as PgMemoryRow;
-      await this.pool.query(`UPDATE ${this.table} SET touched_at = NOW() WHERE id = $1`, [r.id]);
+    if (query.touch !== false) {
+      for (const row of rows.slice(0, limit)) {
+        const r = row as PgMemoryRow;
+        await this.pool.query(`UPDATE ${this.table} SET touched_at = NOW() WHERE id = $1`, [r.id]);
+      }
     }
 
     return (rows as PgMemoryRow[]).map((r) => this._rowToMemory(r));
@@ -371,9 +394,11 @@ export class PostgresStorageAdapter implements StorageProvider {
 
     const { rows } = await this.pool.query(sql, params);
 
-    for (const row of rows.slice(0, limit)) {
-      const r = row as PgMemoryRow;
-      await this.pool.query(`UPDATE ${this.table} SET touched_at = NOW() WHERE id = $1`, [r.id]);
+    if (query.touch !== false) {
+      for (const row of rows.slice(0, limit)) {
+        const r = row as PgMemoryRow;
+        await this.pool.query(`UPDATE ${this.table} SET touched_at = NOW() WHERE id = $1`, [r.id]);
+      }
     }
 
     return (rows as PgMemoryRow[]).map((r) => this._rowToMemory(r));

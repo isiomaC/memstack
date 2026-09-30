@@ -4,6 +4,13 @@ import { writeFile, readFile } from "node:fs/promises";
 import { MemStack } from "@memstack/core";
 import type { MemStackConfig, MemoryType, PruneStrategy } from "@memstack/core";
 import { loadConfig } from "./config.js";
+import { HARNESS_COMMANDS, runHarnessCommand } from "./harness-commands.js";
+
+// Exit quietly when the reader goes away, e.g. `memstack status | head -1`.
+process.stdout.on("error", (error: NodeJS.ErrnoException) => {
+  if (error.code === "EPIPE") process.exit(0);
+  throw error;
+});
 
 async function main() {
   const { positionals, values } = parseArgs({
@@ -29,6 +36,18 @@ async function main() {
       "dry-run": { type: "boolean" },
       out: { type: "string" },
       file: { type: "string" },
+      provider: { type: "string" },
+      "base-url": { type: "string" },
+      model: { type: "string" },
+      "api-key-env": { type: "string" },
+      store: { type: "string" },
+      path: { type: "string" },
+      url: { type: "string" },
+      yes: { type: "boolean" },
+      live: { type: "boolean" },
+      global: { type: "boolean" },
+      delete: { type: "string" },
+      "no-agents-md": { type: "boolean" },
     },
   });
 
@@ -36,6 +55,11 @@ async function main() {
   if (!command) {
     printUsage();
     process.exit(1);
+  }
+
+  if ((HARNESS_COMMANDS as readonly string[]).includes(command)) {
+    process.exitCode = await runHarnessCommand(command, positionals.slice(1), values);
+    return;
   }
 
   const config: MemStackConfig = await loadConfig();
@@ -223,6 +247,16 @@ function parseDuration(input: string): number {
 
 function printUsage() {
   process.stderr.write(`memstack <command> [flags]
+
+Agent harnesses (Claude Code, Codex):
+  init        Choose an LLM provider and store; writes ~/.memstack/config.json
+  connect     Register MemStack with a harness: connect claude-code|codex [--dry-run]
+              For Codex, also adds a marked block to ~/.codex/AGENTS.md (skip with --no-agents-md)
+  disconnect  Remove MemStack from a harness; memories are kept
+  status      Show configuration, project, and harness connections
+  doctor      Diagnose setup problems [--live to test the LLM key]
+  memories    List or search this project's memories [query] [--delete <id>]
+  project     Show this repository's project ID; project pin <id>; project merge <old-id>
 
 Commands:
   store       Store a memory

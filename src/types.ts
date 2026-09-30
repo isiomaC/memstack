@@ -1,6 +1,24 @@
 // ── Memory ──
 
-export type MemoryType = "interaction" | "summary" | "observation" | "fact" | "reflection";
+export type MemoryType =
+  | "interaction"
+  | "summary"
+  | "observation"
+  | "fact"
+  | "reflection"
+  | "preference"
+  | "decision"
+  | "instruction";
+
+/** Where a memory came from. Harness writes store it in `metadata.source`. */
+export interface MemorySource {
+  /** Harness that wrote the memory, e.g. "claude-code" or "codex". */
+  harness: string;
+  /** Project ID the memory belongs to. */
+  project: string;
+  sessionId?: string;
+  cwd?: string;
+}
 
 export interface Memory {
   id: string;
