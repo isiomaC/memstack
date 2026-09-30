@@ -94,6 +94,27 @@ Think of it as the open-source alternative to [Mem0](https://mem0.ai/) — plugg
 
 ## Quick Start
 
+### Claude Code and Codex
+
+Persistent memory across agent harnesses: what you tell Claude Code, Codex
+recalls in the same project, and the reverse.
+
+```bash
+npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0  # MemStack never installs storage drivers for you
+memstack init                  # choose an LLM provider and a store
+memstack connect claude-code
+memstack connect codex
+```
+
+Memories are scoped to the git repository (clones and worktrees of the same
+remote share them), recall runs locally without an LLM call, and any
+supported store works: swap `better-sqlite3` for `postgres@^3.4.9` or
+`ioredis@^5.11.1` and pick that store in `memstack init`. `memstack status`,
+`memstack doctor`, and `memstack memories` show what is connected and
+stored. See [the harness profile](docs/MCP_SETUP.md#harness-profile-claude-code-and-codex).
+
+### As a library
+
 ```bash
 npm install @memstack/core
 ```

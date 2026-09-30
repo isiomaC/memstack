@@ -178,8 +178,17 @@ principle and does not change for harness memory. Users install the driver
 for the store they choose (`better-sqlite3`, `pg`, `ioredis`, ...)
 themselves, as already documented. No `@memstack/*` package depends on a
 driver, and `memstack init`/`connect` never install one. `init` asks which
-store to use and checks that its driver can be loaded. `doctor` reports a
-missing driver together with the documented install command.
+store to use and prints the install command when the driver is missing.
+`doctor` reports a missing driver together with the install command.
+
+`memstack connect` registers the user's own install of `memstack-mcp`
+(`npm install -g @memstack/mcp <driver>`) by absolute path, run with the
+current Node binary. It does not register an `npx -p <driver>` command,
+because npx would download the driver when the harness first starts it.
+Before changing any harness config, `connect` starts the server and checks
+the MCP handshake, the harness tools, and a storage round trip, so a missing
+driver is reported instead of registered. It changes harness config only
+through each harness's own `mcp` commands.
 
 #### Recall lives in Core
 

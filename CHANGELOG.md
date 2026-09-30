@@ -36,6 +36,21 @@
   the working directory; settings come from `~/.memstack/config.json` plus
   environment variables. The default 18-tool profile is unchanged.
 
+### @memstack/cli
+- `memstack init` chooses an LLM provider and store, verifies the key with a
+  real request, and writes `~/.memstack/config.json`. The key can come from
+  a hidden prompt or `--api-key-env <VAR>`, never a command-line argument.
+- `memstack connect claude-code|codex` registers your installed
+  `memstack-mcp` with the harness through its own `mcp` commands. It starts
+  and checks the server first, confirms the harness reads the new entry,
+  restores the previous entry on failure, and changes nothing when already
+  connected. `--dry-run` shows the commands. `memstack disconnect` reverses
+  it and keeps your memories.
+- `memstack status`, `memstack doctor` (`--live` tests the LLM key), and
+  `memstack memories [query] [--delete <id>]`.
+- Nothing is installed for you: when `memstack-mcp` or a storage driver is
+  missing, the commands print the `npm install -g` command to run.
+
 ### @memstack/config-env (internal)
 - `resolveProject()` derives a stable project ID from the normalized
   `origin` remote, else the shared git directory, else the directory, so
