@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased (harness hooks)
+
+- `memstack connect` installs a session-start hook for Claude Code
+  (`~/.claude/settings.json`) and Codex (`~/.codex/hooks.json`) that loads the
+  project's most important memories into every new session, with no LLM call.
+  Codex runs it after you approve it once with `/hooks`. `--no-hooks` skips
+  it; `memstack disconnect` removes it and restores the file byte for byte.
+- `memstack-mcp hook session-start` prints that context. It never blocks a
+  session: on any error it prints nothing and exits 0.
+- `connect` now undoes every change it made (MCP entry, `AGENTS.md` block,
+  hook) if any later step fails.
+
 ## Unreleased
 
 ### @memstack/core

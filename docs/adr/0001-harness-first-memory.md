@@ -321,17 +321,34 @@ Before implementing either adapter, read the current official Claude Code
 and Codex MCP configuration documentation. Record the config file
 locations, formats, and scopes the adapter writes in its fixture tests.
 
-### D11. Hooks are a v2 add-on
+### D11. Session-start recall through harness hooks (v2)
 
-Phase 1 relies on MCP tools and server instructions only. Harness hooks
-are deferred until Phase 1 is stable:
+MCP tools depend on the model choosing to call them. A session-start hook
+runs without that choice: `memstack connect` installs one for each harness,
+and every new session starts with the project's most important memories.
 
-- session-start recall that injects the project's top memories within a
-  size budget;
-- optional per-prompt recall, at a latency cost on every prompt;
-- session-end capture, which depends on the Phase 2 decision pipeline and
-  deterministic secret filtering;
-- per-harness hook installation, rollback, fixtures, and `doctor` checks.
+- `memstack-mcp hook session-start` reads the harness's hook input from
+  stdin, resolves the project (from `CLAUDE_PROJECT_DIR`, else the input
+  `cwd`), and prints up to 15 memories, at most 6,000 characters, as plain
+  text. That stays under Claude Code's 10,000-character and Codex's
+  ~2,500-token context limits. Plain stdout is used rather than JSON
+  `additionalContext`, which Codex has rejected for `SessionStart`
+  (openai/codex#45999). It makes no LLM call, and on any error it prints
+  nothing and exits 0, so it never blocks a session.
+- Claude Code: `SessionStart` with matcher `startup|resume|clear|compact` in
+  `$CLAUDE_CONFIG_DIR/settings.json` (default `~/.claude/settings.json`),
+  since Claude Code has no CLI for hooks. Codex: `SessionStart` with matcher
+  `startup|resume` in `$CODEX_HOME/hooks.json`.
+- Only MemStack's own entry is added, replaced, or removed. The file's other
+  settings and hooks, its indentation, and its trailing newline are kept,
+  so `memstack disconnect` restores it byte for byte. A file that is not
+  valid JSON is left unchanged. `--no-hooks` skips the hook.
+- Codex runs a new or changed hook only after the user approves it with
+  `/hooks`. MemStack does not bypass this; `connect` and `doctor` say so.
+- Deferred: per-prompt recall (`UserPromptSubmit`), opt-in once session-start
+  recall has proven itself, since it adds latency to every prompt; and
+  session-end capture, which waits for the Phase 2 decision pipeline and
+  deterministic secret filtering.
 
 ## Consequences
 

@@ -2,6 +2,8 @@ import { join } from "node:path";
 import { memstackHome } from "@memstack/config-env";
 import { run, type Runner } from "./exec.js";
 import { readBlock, removeBlock, renderBlock, upsertBlock } from "./instructions.js";
+import { readHook, removeHook, sessionStartHook, upsertHook } from "./hooks.js";
+import { snapshot, writeFileAtomic } from "./files.js";
 import { verifyServer, type Verifier, type VerifyResult } from "./verify.js";
 import { sameLaunch, type CommandStep, type ConnectPlan, type HarnessAdapter, type ServerLaunch } from "./types.js";
 
@@ -14,6 +16,8 @@ export interface ConnectOptions {
   dryRun?: boolean;
   /** Add MemStack guidance to the harness's instruction file, when it has one. Default true. */
   instructions?: boolean;
+  /** Add the session-start hook, when the harness supports hooks. Default true. */
+  hooks?: boolean;
   /** Where instruction files are backed up before a change. Default ~/.memstack/backups. */
   backupDir?: string;
 }
@@ -39,6 +43,7 @@ export async function connectHarness({
   verify = verifyServer,
   dryRun,
   instructions = true,
+  hooks = true,
   backupDir = join(memstackHome(), "backups"),
 }: ConnectOptions): Promise<ConnectResult> {
   const state = await adapter.inspect();
@@ -56,6 +61,11 @@ export async function connectHarness({
     const current = readBlock(adapter.instructions.path);
     plan.instructions = { path: adapter.instructions.path, change: current === null ? "add" : current === block ? "none" : "update" };
   }
+  const hook = adapter.sessionHook && hooks ? sessionStartHook(launch, adapter.id) : undefined;
+  if (adapter.sessionHook && hook) {
+    const current = readHook(adapter.sessionHook.path);
+    plan.hook = { path: adapter.sessionHook.path, change: current === null ? "add" : JSON.stringify(current) === JSON.stringify(hook) ? "none" : "update" };
+  }
 
   const verification = await verify(launch);
   if (!verification.ok) {
@@ -63,21 +73,37 @@ export async function connectHarness({
   }
   if (dryRun) return { plan, changed: false, verification };
 
+  // Each applied change records how to undo it; any failure unwinds them all.
+  const undo: (() => Promise<boolean>)[] = [];
   let changed = false;
-  if (!alreadyConnected) {
-    await applyWithRollback(adapter, plan, runner);
-    changed = true;
-  }
-  if (block && plan.instructions && plan.instructions.change !== "none") {
-    try {
-      upsertBlock(plan.instructions.path, block, backupDir);
+  try {
+    if (!alreadyConnected) {
+      await applyWithRollback(adapter, plan, runner);
+      undo.push(() => restore(adapter, plan.previous, runner));
       changed = true;
-    } catch (error) {
-      const restored = alreadyConnected || (await restore(adapter, plan.previous, runner));
-      throw new Error(
-        `Could not update ${plan.instructions.path}: ${(error as Error).message}. ${restored ? "The previous configuration was restored." : "Restoring the previous configuration failed; run `memstack doctor`."}`,
-      );
     }
+    if (block && plan.instructions && plan.instructions.change !== "none") {
+      const path = plan.instructions.path;
+      const before = snapshot(path);
+      // Writes are atomic, so a failed step changed nothing and needs no undo.
+      fileStep(path, () => upsertBlock(path, block, backupDir));
+      undo.push(async () => (writeFileAtomic(path, before), true));
+      changed = true;
+    }
+    if (hook && adapter.sessionHook && plan.hook && plan.hook.change !== "none") {
+      const path = plan.hook.path;
+      const before = snapshot(path);
+      const matcher = adapter.sessionHook.matcher;
+      fileStep(path, () => upsertHook(path, hook, matcher, backupDir));
+      undo.push(async () => (writeFileAtomic(path, before), true));
+      changed = true;
+    }
+  } catch (error) {
+    let restored = true;
+    for (const step of undo.reverse()) restored = (await step().catch(() => false)) && restored;
+    const message = error instanceof Error ? error.message : String(error);
+    if (/previous configuration/.test(message)) throw error;
+    throw new Error(`${message} ${restored ? "The previous configuration was restored." : "Restoring the previous configuration failed; run `memstack doctor`."}`);
   }
   return { plan, changed, verification };
 }
@@ -88,12 +114,15 @@ export async function disconnectHarness({
   runner = run,
   dryRun,
   backupDir = join(memstackHome(), "backups"),
-}: Omit<ConnectOptions, "launch" | "verify" | "instructions">): Promise<{ plan: ConnectPlan; changed: boolean }> {
+}: Omit<ConnectOptions, "launch" | "verify" | "instructions" | "hooks">): Promise<{ plan: ConnectPlan; changed: boolean }> {
   const state = await adapter.inspect();
   if (!state.installed) throw new Error(`${adapter.displayName} is not installed: \`${adapter.binary}\` is not on PATH.`);
   const plan: ConnectPlan = { harness: adapter.id, previous: state.entry, steps: state.entry ? adapter.removeSteps() : [] };
   if (adapter.instructions) {
     plan.instructions = { path: adapter.instructions.path, change: readBlock(adapter.instructions.path) === null ? "none" : "remove" };
+  }
+  if (adapter.sessionHook) {
+    plan.hook = { path: adapter.sessionHook.path, change: readHook(adapter.sessionHook.path) === null ? "none" : "remove" };
   }
   if (dryRun) return { plan, changed: false };
 
@@ -103,6 +132,7 @@ export async function disconnectHarness({
     changed = true;
   }
   if (plan.instructions?.change === "remove") changed = removeBlock(plan.instructions.path, backupDir) || changed;
+  if (plan.hook?.change === "remove") changed = removeHook(plan.hook.path, backupDir) || changed;
   return { plan, changed };
 }
 
@@ -129,6 +159,14 @@ async function restore(adapter: HarnessAdapter, previous: ServerLaunch | undefin
     return sameLaunch((await adapter.inspect()).entry, previous);
   } catch {
     return false;
+  }
+}
+
+function fileStep(path: string, apply: () => unknown): void {
+  try {
+    apply();
+  } catch (error) {
+    throw new Error(`Could not update ${path}: ${(error as Error).message}.`);
   }
 }
 

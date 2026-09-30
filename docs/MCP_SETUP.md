@@ -175,6 +175,12 @@ share one memory per project. It exposes five tools under their usual names,
   call. Writes ask the LLM for topic tags so category questions ("which
   framework?") find specific memories ("uses Hono"). If tagging fails, the
   memory is stored untagged.
+- **Session-start recall.** `memstack connect` installs a session-start hook
+  (`memstack-mcp hook session-start`) in `~/.claude/settings.json` and
+  `~/.codex/hooks.json`, so each new session starts with the project's most
+  important memories even if the agent never calls `memory_retrieve`. Codex
+  runs it after you approve it once with `/hooks`. Skip with `--no-hooks`;
+  `memstack disconnect` removes it and restores the file exactly.
 - **Guidance.** The server sends MCP `instructions` telling the agent when to
   recall and remember. Codex gives those little weight, so
   `memstack connect codex` also adds a marked block to `~/.codex/AGENTS.md`

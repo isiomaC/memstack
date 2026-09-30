@@ -13,11 +13,14 @@ export function claudeCodeAdapter(options: { runner?: Runner; env?: NodeJS.Proce
   const runner = options.runner ?? createRunner(env);
   const binary = "claude";
   const configPath = join(env.CLAUDE_CONFIG_DIR ?? homedir(), ".claude.json");
+  const settingsPath = env.CLAUDE_CONFIG_DIR ? join(env.CLAUDE_CONFIG_DIR, "settings.json") : join(homedir(), ".claude", "settings.json");
 
   return {
     id: "claude-code",
     displayName: "Claude Code",
     binary,
+    // Also on clear and compact, so the memories survive /clear and context compaction.
+    sessionHook: { path: settingsPath, matcher: "startup|resume|clear|compact" },
 
     async inspect(): Promise<HarnessState> {
       const version = await runner(binary, ["--version"]);

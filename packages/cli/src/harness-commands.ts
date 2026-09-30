@@ -42,6 +42,7 @@ import {
   verifyServer,
 } from "./harness/index.js";
 import { readBlock, renderBlock } from "./harness/instructions.js";
+import { readHook, sessionStartHook } from "./harness/hooks.js";
 
 export const HARNESS_COMMANDS = ["init", "connect", "disconnect", "status", "doctor", "memories", "project"] as const;
 
@@ -60,6 +61,7 @@ export interface HarnessFlags {
   limit?: string;
   delete?: string;
   "no-agents-md"?: boolean;
+  "no-hooks"?: boolean;
 }
 
 const out = (line = "") => process.stdout.write(`${line}\n`);
@@ -204,21 +206,36 @@ async function connect(ids: string[], flags: HarnessFlags): Promise<number> {
   for (const id of ids) {
     const adapter = harnessAdapter(id);
     const launch = harnessLaunch(mcp, adapter.id);
-    const result = await connectHarness({ adapter, launch, dryRun: flags["dry-run"], instructions: !flags["no-agents-md"] });
+    const result = await connectHarness({
+      adapter,
+      launch,
+      dryRun: flags["dry-run"],
+      instructions: !flags["no-agents-md"],
+      hooks: !flags["no-hooks"],
+    });
     const instructions = result.plan.instructions;
+    const hook = result.plan.hook;
     if (flags["dry-run"]) {
       out(`${adapter.displayName}: the server works (${result.verification.stats}).`);
-      const pending = result.plan.steps.length > 0 || (instructions && instructions.change !== "none");
+      const pending = result.plan.steps.length > 0 || (instructions && instructions.change !== "none") || (hook && hook.change !== "none");
       out(pending ? "Would run:" : "Already connected; nothing to change.");
       for (const step of result.plan.steps) out(`  ${describeStep(step)}`);
       if (instructions && instructions.change !== "none") {
         out(`  ${instructions.change === "add" ? "add" : "update"} the marked MemStack block in ${instructions.path}:`);
         for (const line of renderBlock(adapter.instructions!.body, adapter.id).trimEnd().split("\n")) out(`    ${line}`);
       }
+      if (hook && hook.change !== "none") {
+        out(`  ${hook.change} the MemStack session-start hook in ${hook.path}:`);
+        out(`    ${sessionStartHook(launch, adapter.id).command}`);
+      }
     } else if (result.changed) {
       out(`✓ Connected ${adapter.displayName}. ${result.verification.stats}`);
       if (instructions && instructions.change !== "none") {
         out(`  ${instructions.change === "add" ? "Added" : "Updated"} MemStack guidance in ${instructions.path} (between memstack:begin/end markers).`);
+      }
+      if (hook && hook.change !== "none") {
+        out(`  ${hook.change === "add" ? "Added" : "Updated"} a session-start hook in ${hook.path} that loads project memories.`);
+        if (adapter.id === "codex") out("  Codex runs new hooks only after you approve them: open Codex and run /hooks once.");
       }
       out(`  ${adapter.id === "claude-code" ? "Restart Claude Code" : "Start a new Codex session"} to load MemStack.`);
     } else {
@@ -234,11 +251,13 @@ async function disconnect(ids: string[], flags: HarnessFlags): Promise<number> {
     const adapter = harnessAdapter(id);
     const result = await disconnectHarness({ adapter, dryRun: flags["dry-run"] });
     const removeBlock = result.plan.instructions?.change === "remove";
+    const removeHook = result.plan.hook?.change === "remove";
     if (flags["dry-run"]) {
-      const pending = result.plan.steps.length > 0 || removeBlock;
+      const pending = result.plan.steps.length > 0 || removeBlock || removeHook;
       out(pending ? `${adapter.displayName}: would run:` : `${adapter.displayName}: not connected; nothing to change.`);
       for (const step of result.plan.steps) out(`  ${describeStep(step)}`);
       if (removeBlock) out(`  remove the marked MemStack block from ${result.plan.instructions!.path}`);
+      if (removeHook) out(`  remove the MemStack session-start hook from ${result.plan.hook!.path}`);
     } else {
       out(result.changed ? `✓ Disconnected ${adapter.displayName}. Your memories are kept.` : `${adapter.displayName} was not connected.`);
     }
@@ -279,8 +298,18 @@ async function status(): Promise<number> {
       const current = block === renderBlock(adapter.instructions.body, adapter.id);
       out(`${label("")}guidance in ${adapter.instructions.path}: ${block === null ? "none" : current ? "present" : "outdated (run `memstack connect`)"}`);
     }
+    if (adapter.sessionHook && state.installed) {
+      out(`${label("")}session-start hook in ${adapter.sessionHook.path}: ${hookState(adapter, mcp)}`);
+    }
   }
   return 0;
+}
+
+function hookState(adapter: ReturnType<typeof harnessAdapter>, mcp: string | null): string {
+  const current = readHook(adapter.sessionHook!.path);
+  if (!current) return "missing";
+  if (mcp && JSON.stringify(current) !== JSON.stringify(sessionStartHook(harnessLaunch(mcp, adapter.id), adapter.id))) return "outdated";
+  return "present";
 }
 
 // ── doctor ──
@@ -364,6 +393,14 @@ async function doctor(flags: HarnessFlags): Promise<number> {
       if (block === null) warn(`${adapter.displayName} has no MemStack guidance in ${adapter.instructions.path}, so it may not save memories when asked. Run: memstack connect ${id}`);
       else if (block !== renderBlock(adapter.instructions.body, adapter.id)) warn(`MemStack guidance in ${adapter.instructions.path} is outdated. Run: memstack connect ${id}`);
       else pass(`${adapter.displayName} guidance in ${adapter.instructions.path}`);
+    }
+    if (adapter.sessionHook) {
+      const hookStatus = hookState(adapter, mcp);
+      if (hookStatus === "present") {
+        pass(`${adapter.displayName} session-start hook in ${adapter.sessionHook.path}${id === "codex" ? " (approve it once in Codex with /hooks)" : ""}`);
+      } else {
+        warn(`${adapter.displayName} session-start hook is ${hookStatus}. Run: memstack connect ${id}`);
+      }
     }
   }
 

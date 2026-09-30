@@ -31,8 +31,12 @@ export interface ConnectPlan {
   /** Entry after the change; undefined for a disconnect. */
   target?: ServerLaunch;
   /** Instruction file change, when the harness has one and it is not skipped. */
-  instructions?: { path: string; change: "add" | "update" | "remove" | "none" };
+  instructions?: { path: string; change: FileChange };
+  /** Session-start hook change, when the harness supports hooks and they are not skipped. */
+  hook?: { path: string; change: FileChange };
 }
+
+export type FileChange = "add" | "update" | "remove" | "none";
 
 /**
  * One agent harness. Adapters change configuration only through the
@@ -49,6 +53,8 @@ export interface HarnessAdapter {
   removeSteps(): CommandStep[];
   /** Global instruction file the harness always loads, when MemStack should add guidance to it. */
   instructions?: { path: string; body: string };
+  /** Hooks file where MemStack adds its session-start hook, and the SessionStart matcher to use. */
+  sessionHook?: { path: string; matcher: string };
 }
 
 export const SERVER_NAME = "memstack";
