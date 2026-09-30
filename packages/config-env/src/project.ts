@@ -1,4 +1,4 @@
-// Project identity shared by every harness (ADR 0001, D3). The ID is derived
+// Project identity shared by every harness. The ID is derived
 // from the repository itself every time, with no stored state, so it survives
 // remote changes, moves, new clones, new machines, and switching storage.
 import { execFileSync } from "node:child_process";

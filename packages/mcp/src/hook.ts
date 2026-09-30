@@ -1,4 +1,4 @@
-// Session-start hook (ADR 0001, D11): prints the project's most important
+// Session-start hook: prints the project's most important
 // memories so a new Claude Code or Codex session starts knowing them, even
 // if the model never calls memory_retrieve. It makes no LLM call and never
 // blocks a session: on any error it prints nothing and exits 0.

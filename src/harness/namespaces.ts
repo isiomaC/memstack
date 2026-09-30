@@ -1,4 +1,4 @@
-// Namespace values for harness memory, stored in `actorId` (ADR 0001, D2).
+// Namespace values for harness memory, stored in `actorId`.
 // `global`, `project:`, and `session:` are reserved actorId values.
 
 export const GLOBAL_NAMESPACE = "global";

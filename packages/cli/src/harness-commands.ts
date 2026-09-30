@@ -1,5 +1,5 @@
 // Harness commands: init, connect, disconnect, status, doctor, memories
-// (ADR 0001). None of them installs packages: when the MCP server or a
+// None of them installs packages: when the MCP server or a
 // storage driver is missing they print the command for the user to run.
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";

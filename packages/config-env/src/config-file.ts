@@ -1,4 +1,4 @@
-// ~/.memstack/config.json (ADR 0001, D8). Holds the LLM provider and key and
+// ~/.memstack/config.json. Holds the LLM provider and key and
 // the storage choice, so harness MCP configs carry no secrets. The file never
 // makes MemStack install a storage driver; it only records which one to load.
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
