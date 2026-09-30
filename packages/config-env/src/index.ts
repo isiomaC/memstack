@@ -168,8 +168,8 @@ async function buildConfig(env: Env): Promise<EnvConfigResult> {
   };
 }
 
-export { resolveProject, normalizeRemote } from "./project.js";
-export type { ProjectIdentity } from "./project.js";
+export { resolveProject, normalizeRemote, pinProject, PIN_FILE } from "./project.js";
+export type { ProjectIdentity, ProjectSource } from "./project.js";
 export {
   STORAGE_TYPES,
   memstackHome,

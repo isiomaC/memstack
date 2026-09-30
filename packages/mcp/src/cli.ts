@@ -61,6 +61,8 @@ async function runHarness(harness: string | undefined) {
     llm: config.llm,
     onError: (error, context) => console.error(`memstack-mcp: ${context}: ${error.message}`),
   });
+  const adopted = await memory.adoptProjects(project.previousIds, project.id);
+  if (adopted > 0) console.error(`memstack-mcp: moved ${adopted} memories from this project's previous ID to ${project.id}.`);
   const server = createHarnessServer({ memory, projectId: project.id, harness, cwd: project.root });
   const transport = new StdioServerTransport();
   await server.connect(transport);

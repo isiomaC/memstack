@@ -3,7 +3,8 @@ import type { LLMProvider, StorageProvider } from "../interfaces.js";
 import { LexicalRetriever } from "../retrieval/LexicalRetriever.js";
 import type { RecallResult } from "../retrieval/LexicalRetriever.js";
 import { ENRICHMENT_MAX_TOKENS, parseTags } from "../enrichment.js";
-import { notFound, validationError } from "../errors.js";
+import { MemStackError, notFound, validationError } from "../errors.js";
+import { projectNamespace } from "./namespaces.js";
 
 export interface HarnessMemoryConfig {
   storage: StorageProvider;
@@ -133,6 +134,65 @@ export class HarnessMemory {
       counts[namespace] = await this.storage.count({ actorId: namespace });
     }
     return counts;
+  }
+
+  /**
+   * Moves every memory from one namespace to another, keeping content,
+   * kind, importance, tags, provenance, and creation time. Memories get new
+   * IDs. Used when a project's ID changes, e.g. after its first commit.
+   * Safe to run from two processes at once: a copy whose original was
+   * already moved by the other process is removed again.
+   */
+  async moveNamespace(from: string, to: string): Promise<number> {
+    if (!from || !to) throw validationError("Both namespaces are required");
+    if (from === to) return 0;
+    await this.ensureInit();
+    let moved = 0;
+    for (;;) {
+      const batch = await this.storage.retrieve({ actorId: from, limit: 500, strategy: "recent", touch: false });
+      if (batch.length === 0) return moved;
+      let progressed = false;
+      for (const memory of batch) {
+        const copy = await this.storage.store({
+          actorId: to,
+          content: memory.content,
+          memoryType: memory.memoryType,
+          importance: memory.importance,
+          emotionalValence: memory.emotionalValence,
+          tags: memory.tags,
+          metadata: memory.metadata,
+          createdAt: memory.createdAt,
+          expiresAt: memory.expiresAt,
+        });
+        try {
+          await this.storage.delete(memory.id);
+          moved++;
+          progressed = true;
+        } catch (error) {
+          await this.storage.delete(copy.id);
+          if (!(error instanceof MemStackError && error.code === "NOT_FOUND")) throw error;
+        }
+      }
+      if (!progressed) return moved;
+    }
+  }
+
+  /**
+   * Adopts memories a project stored under IDs it had before, such as
+   * before its first commit. Costs one count per previous ID when there is
+   * nothing to move. Returns the number of memories moved.
+   */
+  async adoptProjects(previousIds: string[], projectId: string): Promise<number> {
+    const target = projectNamespace(projectId);
+    let moved = 0;
+    for (const id of new Set(previousIds)) {
+      const from = projectNamespace(id);
+      if (from === target) continue;
+      await this.ensureInit();
+      if ((await this.storage.count({ actorId: from })) === 0) continue;
+      moved += await this.moveNamespace(from, target);
+    }
+    return moved;
   }
 
   private ensureInit(): Promise<void> {

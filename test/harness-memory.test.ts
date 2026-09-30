@@ -142,6 +142,51 @@ describe("HarnessMemory", () => {
     });
   });
 
+  describe("moving namespaces", () => {
+    it("moves memories with their content, kind, tags, provenance, and creation time", async () => {
+      const harness = new HarnessMemory({ storage, llm: fakeLlm('["framework"]') });
+      const original = await harness.remember({ namespace: "project:old", content: "Uses Hono", kind: "decision", importance: 0.8, source });
+      await storage.store({ actorId: "project:old", content: "Old note", createdAt: new Date("2026-01-01T00:00:00Z") });
+
+      expect(await harness.moveNamespace("project:old", "project:new")).toBe(2);
+
+      expect(await storage.count({ actorId: "project:old" })).toBe(0);
+      const moved = await storage.retrieve({ actorId: "project:new", limit: 10, touch: false });
+      expect(moved.map((m) => m.content).sort()).toEqual(["Old note", "Uses Hono"]);
+      expect(moved.find((m) => m.content === "Uses Hono")).toMatchObject({
+        memoryType: "decision",
+        importance: 0.8,
+        tags: ["framework"],
+        metadata: { source },
+        createdAt: original.createdAt,
+      });
+      expect(moved.find((m) => m.content === "Old note")!.createdAt.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+    });
+
+    it("leaves one copy when two processes move at the same time", async () => {
+      for (let i = 0; i < 20; i++) await storage.store({ actorId: "project:old", content: `note ${i}` });
+      const a = new HarnessMemory({ storage, llm: fakeLlm("[]") });
+      const b = new HarnessMemory({ storage, llm: fakeLlm("[]") });
+
+      await Promise.all([a.moveNamespace("project:old", "project:new"), b.moveNamespace("project:old", "project:new")]);
+
+      expect(await storage.count({ actorId: "project:old" })).toBe(0);
+      expect(await storage.count({ actorId: "project:new" })).toBe(20);
+    });
+
+    it("adopts previous project IDs and skips empty ones", async () => {
+      const harness = new HarnessMemory({ storage, llm: fakeLlm("[]") });
+      await storage.store({ actorId: "project:before-first-commit", content: "Early decision" });
+      const count = vi.spyOn(storage, "count");
+
+      expect(await harness.adoptProjects(["before-first-commit", "empty", "current"], "current")).toBe(1);
+      expect(count).toHaveBeenCalledTimes(2);
+      expect((await harness.recall({ namespaces: ["project:current"], query: "decision" })).hits).toHaveLength(1);
+
+      expect(await harness.adoptProjects(["before-first-commit"], "current")).toBe(0);
+    });
+  });
+
   it("initializes storage once", async () => {
     const init = vi.spyOn(storage, "initialize");
     const harness = new HarnessMemory({ storage, llm: fakeLlm("[]") });
