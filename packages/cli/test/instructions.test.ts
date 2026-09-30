@@ -71,6 +71,24 @@ describe("managed instruction block", () => {
     expect(saved.every((name) => name.startsWith("AGENTS.md."))).toBe(true);
   });
 
+  it("keeps every backup when changes land in the same millisecond", () => {
+    writeFileSync(file, "mine\n");
+    const now = Date.prototype.toISOString;
+    Date.prototype.toISOString = () => "2026-09-30T12:00:00.000Z";
+    try {
+      upsertBlock(file, block, backups);
+      removeBlock(file, backups);
+      upsertBlock(file, block, backups);
+    } finally {
+      Date.prototype.toISOString = now;
+    }
+    expect(readdirSync(backups).sort()).toEqual([
+      "AGENTS.md.2026-09-30T12-00-00-000Z",
+      "AGENTS.md.2026-09-30T12-00-00-000Z-1",
+      "AGENTS.md.2026-09-30T12-00-00-000Z-2",
+    ]);
+  });
+
   it("does nothing when removing an absent block", () => {
     writeFileSync(file, "mine\n");
     expect(removeBlock(file, backups)).toBe(false);
