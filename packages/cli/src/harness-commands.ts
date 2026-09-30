@@ -249,7 +249,10 @@ async function status(): Promise<number> {
     let line: string;
     if (!state.installed) line = "not installed";
     else if (!state.entry) line = "not connected";
-    else if (mcp && sameLaunch(state.entry, harnessLaunch(mcp, adapter.id))) line = "connected";
+    else if (!mcp) {
+      const present = [state.entry.command, ...state.entry.args.filter((a) => a.startsWith("/"))].every((p) => existsSync(p));
+      line = present ? "connected (memstack-mcp is not on PATH, so updates can't be checked)" : "connected to a command that no longer exists (run `memstack doctor`)";
+    } else if (sameLaunch(state.entry, harnessLaunch(mcp, adapter.id))) line = "connected";
     else line = "connected with a different command (run `memstack connect` to update)";
     out(`${label(adapter.displayName)}${line}`);
   }

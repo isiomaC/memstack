@@ -22,9 +22,10 @@ const KINDS = [
 ] as const satisfies readonly MemoryType[];
 
 export const HARNESS_INSTRUCTIONS = [
-  "MemStack is persistent memory for this project, shared with other coding agents.",
-  "Call memory_retrieve at the start of a task and before decisions that depend on project history, conventions, or user preferences.",
-  "Call memory_store when the user says to remember something, or when you learn a durable fact, decision, preference, or rule.",
+  "MemStack is this project's persistent memory, shared with other coding agents.",
+  "When the user asks you to remember something, call memory_store. Do not write it into README, AGENTS.md, or other project files unless the user asks for a file change.",
+  "Also call memory_store when you learn a durable fact, decision, preference, or rule.",
+  "Call memory_retrieve at the start of a task and before decisions that depend on project history, conventions, or preferences.",
   "Never store secrets, credentials, or personal data.",
   "",
   'Store one self-contained statement per memory, e.g. "This project uses Hono for the API". Memories are project-scoped; use scope "global" only for preferences that apply to every project. memory_retrieve takes natural-language questions. Cite memory IDs when you rely on them, and delete memories that turn out to be wrong with memory_delete.',
@@ -50,7 +51,7 @@ const NoArgs = z.object({}).strict();
 const TOOLS = [
   {
     name: "memory_store",
-    description: "Remember a durable fact, decision, preference, or rule for this project so later sessions and other agents can recall it.",
+    description: "Save to project memory. Use this whenever the user asks you to remember something, instead of editing project files, and for durable facts, decisions, preferences, or rules. Later sessions and other agents can recall it.",
     schema: StoreArgs,
   },
   {

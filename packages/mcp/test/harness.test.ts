@@ -52,6 +52,7 @@ describe("harness MCP profile", () => {
     expect(head).toContain("memory_retrieve");
     expect(head).toContain("memory_store");
     expect(head).toContain("Never store secrets");
+    expect(head).toContain("Do not write it into README");
   });
 
   it("stores and recalls with provenance", async () => {
