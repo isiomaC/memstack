@@ -48,6 +48,7 @@ async function main() {
       global: { type: "boolean" },
       delete: { type: "string" },
       "no-agents-md": { type: "boolean" },
+      "no-hooks": { type: "boolean" },
     },
   });
 
@@ -251,6 +252,7 @@ function printUsage() {
 Agent harnesses (Claude Code, Codex):
   init        Choose an LLM provider and store; writes ~/.memstack/config.json
   connect     Register MemStack with a harness: connect claude-code|codex [--dry-run]
+              Adds a session-start hook that loads project memories (skip with --no-hooks)
               For Codex, also adds a marked block to ~/.codex/AGENTS.md (skip with --no-agents-md)
   disconnect  Remove MemStack from a harness; memories are kept
   status      Show configuration, project, and harness connections

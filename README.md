@@ -106,7 +106,9 @@ memstack connect codex
 
 Memories are scoped to the git repository by its first commit, so clones,
 worktrees, renamed remotes, and moved folders all share them (pin a name with
-`memstack project pin <id>`). For Codex, `connect` also adds a marked block to
+`memstack project pin <id>`). `connect` also installs a session-start hook, so every
+new session starts with the project's key memories (Codex asks you to approve
+it once with `/hooks`). For Codex, `connect` also adds a marked block to
 `~/.codex/AGENTS.md` so it saves memories when asked. Recall runs locally
 without an LLM call, and any
 supported store works: swap `better-sqlite3` for `postgres@^3.4.9` or

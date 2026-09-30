@@ -1,8 +1,8 @@
 // A marked block of agent instructions in a harness's global instruction file
 // (Codex: $CODEX_HOME/AGENTS.md). Only the text between the markers is ever
 // touched; the rest of the file is kept byte for byte.
-import { constants, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { backupFile, writeFileAtomic } from "./files.js";
 
 const BEGIN = "<!-- memstack:begin";
 const END = "<!-- memstack:end -->";
@@ -51,7 +51,7 @@ export function removeBlock(path: string, backupDir: string): boolean {
   // The block and the blank-line separator added before it.
   const next = current.replace(BLOCK_PATTERN, "");
   if (next.trim() === "") {
-    backup(path, backupDir);
+    backupFile(path, backupDir);
     rmSync(path);
   } else {
     write(path, next, current, backupDir);
@@ -60,25 +60,6 @@ export function removeBlock(path: string, backupDir: string): boolean {
 }
 
 function write(path: string, content: string, previous: string | null, backupDir: string): void {
-  if (previous !== null) backup(path, backupDir);
-  mkdirSync(dirname(path), { recursive: true });
-  const mode = previous !== null ? statSync(path).mode & 0o777 : 0o644;
-  const tmp = `${path}.memstack-${process.pid}.tmp`;
-  writeFileSync(tmp, content, { mode });
-  renameSync(tmp, path);
-}
-
-// Never overwrites an earlier backup: two changes in the same millisecond get
-// numbered names instead of sharing one.
-function backup(path: string, backupDir: string): void {
-  mkdirSync(backupDir, { recursive: true, mode: 0o700 });
-  const base = join(backupDir, `${basename(path)}.${new Date().toISOString().replace(/[:.]/g, "-")}`);
-  for (let n = 0; ; n++) {
-    try {
-      copyFileSync(path, n === 0 ? base : `${base}-${n}`, constants.COPYFILE_EXCL);
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
-  }
+  if (previous !== null) backupFile(path, backupDir);
+  writeFileAtomic(path, content);
 }

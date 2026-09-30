@@ -102,6 +102,7 @@ describe.skipIf(!ready)("cross-harness memory through memstack connect", () => {
     expect(first.code, first.out).toBe(0);
     expect(first.out).toContain("✓ Connected Claude Code.");
     expect(first.out).toContain("✓ Connected Codex.");
+    expect(first.out).toContain("Codex runs new hooks only after you approve them");
 
     const again = memstack("connect", "claude-code", "codex");
     expect(again.out).toContain("Claude Code is already connected");
@@ -135,6 +136,25 @@ describe.skipIf(!ready)("cross-harness memory through memstack connect", () => {
     expect(await callTool(codexEntry, elsewhere, env, "memory_retrieve", { query: "framework" })).toBe("No memories yet for this project.");
   }, 120_000);
 
+  it("installs session-start hooks that load the project's memories", () => {
+    const claudeHook = JSON.parse(readFileSync(join(root, "claude", "settings.json"), "utf8")).hooks.SessionStart[0];
+    const codexHook = JSON.parse(readFileSync(join(root, "codex", "hooks.json"), "utf8")).hooks.SessionStart[0];
+    expect(claudeHook.matcher).toBe("startup|resume|clear|compact");
+    expect(codexHook.matcher).toBe("startup|resume");
+
+    for (const [group, extra] of [[claudeHook, { CLAUDE_PROJECT_DIR: repo }], [codexHook, {}]] as const) {
+      // Run the command exactly as the harness does: through a shell, with its JSON input on stdin.
+      const output = execFileSync("/bin/sh", ["-c", group.hooks[0].command], {
+        input: JSON.stringify({ cwd: repo, session_id: "e2e", source: "startup", hook_event_name: "SessionStart" }),
+        env: { ...env, ...extra },
+        encoding: "utf8",
+      });
+      expect(output).toMatch(/^MemStack project memory/);
+      expect(output).toContain("This project uses Hono");
+      expect(output).toContain("Validation uses Zod");
+    }
+  }, 60_000);
+
   it("lists the project's memories and passes doctor", () => {
     const listed = memstack("memories");
     expect(listed.code, listed.out).toBe(0);
@@ -145,6 +165,8 @@ describe.skipIf(!ready)("cross-harness memory through memstack connect", () => {
     expect(doctor.out).toContain("✓ Claude Code is connected");
     expect(doctor.out).toContain("✓ Codex is connected");
     expect(doctor.out).toContain("✓ MCP server starts and answers");
+    expect(doctor.out).toContain("✓ Claude Code session-start hook");
+    expect(doctor.out).toContain("✓ Codex session-start hook");
     expect(doctor.code, doctor.out).toBe(0);
   }, 120_000);
 
@@ -174,6 +196,9 @@ describe.skipIf(!ready)("cross-harness memory through memstack connect", () => {
     const result = memstack("disconnect", "claude-code", "codex");
     expect(result.out).toContain("✓ Disconnected Claude Code. Your memories are kept.");
     expect(memstack("status").out).toMatch(/Claude Code:\s+not connected\n/);
+    expect(existsSync(join(root, "codex", "hooks.json"))).toBe(false);
+    expect(existsSync(join(root, "codex", "AGENTS.md"))).toBe(false);
+    expect(existsSync(join(root, "claude", "settings.json"))).toBe(false);
     expect(memstack("memories").out).toContain("This project uses Hono");
   }, 120_000);
 });

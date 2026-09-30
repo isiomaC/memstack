@@ -7,11 +7,22 @@ import { resolveProject } from "@memstack/config-env";
 import { loadConfig, loadHarnessConfig } from "./config.js";
 import { createServer } from "./server.js";
 import { createHarnessServer } from "./harness.js";
+import { runSessionStartHook } from "./hook.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 
 async function main() {
+  // `memstack-mcp hook session-start`: harness hook, not an MCP server.
+  if (process.argv[2] === "hook") {
+    if (process.argv[3] !== "session-start") {
+      console.error(`Unknown hook "${process.argv[3] ?? ""}". Supported: session-start`);
+      return;
+    }
+    await runSessionStartHook();
+    process.exit(0);
+  }
+
   const { values } = parseArgs({
     options: {
       http: { type: "boolean", default: false },

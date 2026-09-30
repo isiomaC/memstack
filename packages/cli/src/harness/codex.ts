@@ -21,6 +21,7 @@ export function codexAdapter(options: { runner?: Runner; env?: NodeJS.ProcessEnv
     // Codex gives MCP server instructions little weight, so without this it
     // acknowledges "remember that..." instead of calling memory_store.
     instructions: { path: join(home, "AGENTS.md"), body: CODEX_INSTRUCTIONS },
+    sessionHook: { path: join(home, "hooks.json"), matcher: "startup|resume" },
 
     async inspect(): Promise<HarnessState> {
       const version = await runner(binary, ["--version"]);
