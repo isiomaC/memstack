@@ -14,7 +14,7 @@ memstack store --actor "agent-1" --content "User reported login bug"
 |---|---|---|---|
 | `--actor` | yes | string | Actor ID |
 | `--content` | yes | string | Memory text |
-| `--type` | no | `interaction` \| `summary` \| `observation` \| `fact` \| `reflection` | Memory classification (default: `interaction`) |
+| `--type` | no | `interaction` \| `summary` \| `observation` \| `fact` \| `reflection` \| `preference` \| `decision` \| `instruction` | Memory classification (default: `interaction`) |
 | `--importance` | no | float 0.0–1.0 | Survival priority |
 | `--tags` | no | CSV string | `"bug,login,urgent"` |
 
@@ -205,3 +205,22 @@ Durations use `{number}{unit}` suffix: `s` (seconds), `m` (minutes), `h` (hours)
 30m = 30 minutes (1800000 ms)
 10s = 10 seconds (10000 ms)
 ```
+
+## Harness commands
+
+Connect Claude Code and Codex to one memory per project. These print readable
+text (not JSON) and read `~/.memstack/config.json` (or
+`$MEMSTACK_HOME/config.json`) overlaid with environment variables.
+
+| Command | Flags | Description |
+|---|---|---|
+| `memstack init` | `--provider openai-compatible\|anthropic`, `--base-url`, `--model`, `--api-key-env <VAR>`, `--store`, `--path`, `--url`, `--yes` | Choose an LLM provider and store; verifies the key with a real request |
+| `memstack connect <claude-code\|codex>` | `--dry-run`, `--no-hooks`, `--no-agents-md` | Register MemStack, a session-start hook, and (Codex) `AGENTS.md` guidance |
+| `memstack disconnect <claude-code\|codex>` | `--dry-run` | Remove everything `connect` added; memories are kept |
+| `memstack status` | | Config, storage, current project, and connections |
+| `memstack doctor` | `--live` | Diagnose problems; non-zero exit when any are found |
+| `memstack memories [query]` | `--global`, `--limit <n>`, `--delete <id>` | List or search the current project's memories |
+| `memstack project` | `pin <id>`, `merge <old-id>` | Show, pin, or merge project IDs |
+
+MemStack never installs storage drivers: install `@memstack/mcp` and the
+driver for your store yourself, e.g. `npm install -g @memstack/mcp better-sqlite3@^11.10.0`.

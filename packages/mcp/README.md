@@ -1,6 +1,6 @@
 # @memstack/mcp
 
-MCP server for MemStack — persistent AI agent memory via the Model Context Protocol.
+MCP server for MemStack — persistent AI agent memory via the Model Context Protocol. Includes a harness profile that gives Claude Code and Codex one shared memory per project.
 
 ## Installation
 
@@ -45,9 +45,54 @@ Add to your MCP client config (`~/.config/opencode/`, `~/.claude/mcp.json`, or `
 }
 ```
 
+## Harness profile (Claude Code and Codex)
+
+`memstack-mcp --profile harness` is a smaller, project-scoped server for
+coding agents. You normally don't configure it by hand:
+[`memstack connect`](../cli/README.md#claude-code-and-codex) registers it with
+Claude Code and Codex.
+
+```bash
+npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0
+memstack init && memstack connect claude-code && memstack connect codex
+```
+
+| Tool | Description |
+|---|---|
+| `memory_store` | Save a fact, decision, preference, or rule to project memory (`scope: "global"` for every project) |
+| `memory_retrieve` | Recall memories for a natural-language question; local keyword ranking, no LLM call |
+| `memory_get` | Get one memory by ID |
+| `memory_delete` | Delete a wrong or outdated memory |
+| `memory_stats` | Show the current project and its memory count |
+
+- **No `actorId`.** The project comes from `CLAUDE_PROJECT_DIR` (set by
+  Claude Code) or the working directory (Codex), identified by the
+  repository's first commit. One project can't read or delete another's
+  memories, and bulk or destructive tools are not exposed.
+- **Instructions.** The server sends MCP `instructions` telling the agent to
+  recall at the start of a task and to save when asked to remember.
+- **Tagging.** `memory_store` asks your LLM for topic tags so category
+  questions find specific memories; if tagging fails, the memory is still
+  saved.
+- **Settings** come from `~/.memstack/config.json` (written by
+  `memstack init`) overlaid with the environment variables below. Stdio only.
+- **`--harness <name>`** labels which agent wrote each memory.
+
+### Session-start hook
+
+`memstack-mcp hook session-start` prints the project's most important memories
+(up to 15, at most 6,000 characters) as plain text. `memstack connect`
+installs it as a `SessionStart` hook in Claude Code and Codex, so each new
+session starts with them. It reads the harness's hook input from stdin, makes
+no LLM call, and on any error prints nothing and exits 0, so it never blocks
+a session.
+
 ## Configuration
 
-All configuration is via environment variables. No config files needed.
+The default profile is configured by environment variables only. The harness
+profile also reads `~/.memstack/config.json`; any LLM variable in the
+environment replaces the file's `llm` section, and `MEMSTACK_STORAGE` replaces
+its `storage` section.
 
 ### Storage backends
 
@@ -113,7 +158,7 @@ Without embedding config, retrieval falls back to keyword + importance search.
 
 ## Tools
 
-The MCP server exposes these tools to the agent:
+The default profile exposes these tools to the agent:
 
 | Tool | Description |
 |---|---|
@@ -174,7 +219,7 @@ HTTP mode is stateless (`sessionIdGenerator: undefined` per the MCP spec) — ea
 
 ## Actor persistence
 
-By default, all memories belong to the `"default"` actor. Set `MEMSTACK_ACTOR` to identify the agent:
+In the default profile, all memories belong to the `"default"` actor by default. Set `MEMSTACK_ACTOR` to identify the agent:
 
 ```
 MEMSTACK_ACTOR=my-agent

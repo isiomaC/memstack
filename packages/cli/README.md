@@ -1,6 +1,6 @@
 # @memstack/cli
 
-CLI for MemStack — shell-based agent memory. Use from bash scripts, opencode/Claude Code shell tools, CI pipelines, or any subprocess-capable agent.
+CLI for MemStack — shell-based agent memory. Connect Claude Code and Codex to one shared memory per project, or use it from bash scripts, CI pipelines, or any subprocess-capable agent.
 
 ## Installation
 
@@ -10,9 +10,38 @@ npm install -g @memstack/cli
 npx @memstack/cli [command]
 ```
 
+## Claude Code and Codex
+
+Give both agents one persistent memory per project. MemStack never installs
+storage drivers; install the one for your store with the MCP server:
+
+```bash
+npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0
+memstack init                   # LLM provider + store → ~/.memstack/config.json
+memstack connect claude-code
+memstack connect codex          # then approve the MemStack hook once in Codex with /hooks
+```
+
+| Command | What it does |
+|---|---|
+| `init` | Choose an LLM provider and store; verifies the key with a real request. Non-interactive: `--provider openai-compatible\|anthropic --base-url <url> --model <name> --api-key-env <VAR> --store <type> [--path <file> \| --url <url>] --yes`. |
+| `connect <claude-code\|codex>` | Registers your installed `memstack-mcp`, adds a session-start hook that loads project memories, and for Codex a marked block in `~/.codex/AGENTS.md`. Checks the server first and undoes everything if a step fails. `--dry-run`, `--no-hooks`, `--no-agents-md`. |
+| `disconnect <claude-code\|codex>` | Removes everything `connect` added, restoring each file exactly. Memories are kept. |
+| `status` | Config, storage, the current project, and each agent's connection, hook, and guidance. |
+| `doctor` | Diagnoses problems and prints the fix for each. `--live` tests the LLM key. Exits non-zero when it finds a problem. |
+| `memories [query]` | Lists or searches the current project's memories. `--global`, `--limit <n>`, `--delete <id>`. |
+| `project` | Shows the current project ID. `project pin <id>` writes `.memstack.json`; `project merge <old-id>` moves memories from an old ID. |
+
+These commands print readable text, not JSON, and read
+`~/.memstack/config.json` (or `$MEMSTACK_HOME/config.json`) overlaid with the
+environment variables below. Projects are identified by the repository's
+first commit, so clones, worktrees, and renamed remotes share memories. See
+[Harness Memory](https://github.com/isiomaC/memstack#harness-memory-claude-code--codex)
+for details.
+
 ## Configuration
 
-All via environment variables. Same scheme as @memstack/mcp.
+The memory commands below are configured by environment variables only. Same scheme as @memstack/mcp.
 
 | Variable | Purpose | Default |
 |---|---|---|
@@ -29,7 +58,7 @@ All via environment variables. Same scheme as @memstack/mcp.
 
 ## Commands
 
-All output is JSON to stdout. Errors go to stderr.
+The memory commands below print JSON to stdout. Errors go to stderr.
 
 ### store
 ```bash

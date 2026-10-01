@@ -13,6 +13,8 @@ const referencePath = resolve(skillDir, "REFERENCE.md");
 const commands = new Set([
   "store", "retrieve", "context", "summarize", "prune", "purge",
   "merge", "stats", "delete", "health", "export", "import",
+  // Harness commands (Claude Code and Codex).
+  "init", "connect", "disconnect", "status", "doctor", "memories", "project",
 ]);
 
 const skill = await readFile(skillPath, "utf8");
