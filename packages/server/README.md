@@ -89,6 +89,8 @@ curl -X POST http://localhost:3000/v1/memories \
 # ]}
 ```
 
+`memoryType` accepts `interaction`, `summary`, `observation`, `fact`, `reflection`, `preference`, `decision`, and `instruction`.
+
 `GET /openapi.json` serves the generated OpenAPI 3.1 document — paste it into [Swagger UI](https://swagger.io/tools/swagger-ui/), [Redoc](https://redocly.com/redoc), or Postman, or run it through an OpenAPI code generator to get a typed client in any language. The request-body schemas in the spec come from the same zod schemas that validate incoming requests, so they can't drift apart.
 
 Note: `POST /v1/prune` and `/v1/prune/dry-run` support every `PruneStrategy` type except `"custom"` — a custom prune strategy is a JavaScript predicate function, which can't be expressed in JSON. Use the `@memstack/core` library directly for custom prune logic.

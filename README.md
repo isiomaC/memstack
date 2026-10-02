@@ -31,6 +31,13 @@ Think of it as the open-source alternative to [Mem0](https://mem0.ai/) — plugg
 
 - [Why MemStack](#why-memstack)
 - [Quick Start](#quick-start)
+- [Harness Memory (Claude Code & Codex)](#harness-memory-claude-code--codex)
+  - [How it works](#how-it-works)
+  - [Commands](#commands)
+  - [What `connect` changes](#what-connect-changes)
+  - [Projects](#projects)
+  - [Storage](#storage)
+  - [Troubleshooting](#troubleshooting)
 - [The Memory Pipeline](#the-memory-pipeline)
   - [Store](#1-store)
   - [Retrieve](#2-retrieve)
@@ -53,7 +60,9 @@ Think of it as the open-source alternative to [Mem0](https://mem0.ai/) — plugg
   - [Memory Subsystem](#memory-subsystem)
   - [Export / Import](#export-import)
   - [Health & Close](#health-close)
+  - [Harness Memory API](#harness-memory-api)
 - [Configuration](#configuration)
+  - [Harness configuration file](#harness-configuration-file)
 - [Advanced Usage](#advanced-usage)
   - [Custom Storage](#custom-storage)
   - [Custom LLM / Embedding](#custom-llm-embedding)
@@ -104,17 +113,9 @@ memstack connect claude-code
 memstack connect codex
 ```
 
-Memories are scoped to the git repository by its first commit, so clones,
-worktrees, renamed remotes, and moved folders all share them (pin a name with
-`memstack project pin <id>`). `connect` also installs a session-start hook, so every
-new session starts with the project's key memories (Codex asks you to approve
-it once with `/hooks`). For Codex, `connect` also adds a marked block to
-`~/.codex/AGENTS.md` so it saves memories when asked. Recall runs locally
-without an LLM call, and any
-supported store works: swap `better-sqlite3` for `postgres@^3.4.9` or
-`ioredis@^5.11.1` and pick that store in `memstack init`. `memstack status`,
-`memstack doctor`, and `memstack memories` show what is connected and
-stored. See [the harness profile](docs/MCP_SETUP.md#harness-profile-claude-code-and-codex).
+Then, in Claude Code: "Remember that this project uses Hono." In Codex, in the
+same repository: "What framework does this project use?" Codex answers Hono.
+See [Harness Memory](#harness-memory-claude-code--codex) for how it works.
 
 ### As a library
 
@@ -218,6 +219,113 @@ console.log(response.text);
 // 4. Every 100 interactions, summarization triggers automatically.
 // Old interactions are compressed into a paragraph. Token costs stay flat.
 ```
+
+---
+
+## Harness Memory (Claude Code & Codex)
+
+Coding agents forget everything between sessions, and they don't share what
+they learn with each other. MemStack gives Claude Code and Codex one memory
+per project: a decision made with one agent is known to the other, and to
+every later session.
+
+### How it works
+
+- **Saving.** Each agent gets five MemStack tools (`memory_store`,
+  `memory_retrieve`, `memory_get`, `memory_delete`, `memory_stats`) through
+  the MCP harness profile. When you say "remember that…", or the agent learns
+  a durable fact, decision, preference, or rule, it calls `memory_store`.
+  MemStack asks your LLM for a few topic tags, so "uses Hono" can later be
+  found by "which framework?". If tagging fails, the memory is still saved.
+- **Recalling.** A session-start hook loads the project's most important
+  memories into every new session, so the agent starts out knowing them.
+  During a session the agent calls `memory_retrieve` with plain questions.
+  Recall runs locally with keyword ranking (BM25 with stemming) and never
+  calls the LLM, so it is fast and works offline.
+- **Scope.** Memories belong to the current project. Preferences that apply
+  everywhere can be saved as global (`scope: "global"`) and are recalled in
+  every project. One project can never read or delete another's memories.
+- **Safety.** Agents don't get bulk or destructive tools, secrets are never to
+  be stored (the agents are told so), and the LLM key stays in
+  `~/.memstack/config.json` (readable only by you), never in agent configs.
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `memstack init` | Choose an LLM provider and a store. Verifies the key with a real request and writes `~/.memstack/config.json`. Non-interactive: `--provider`, `--base-url`, `--model`, `--api-key-env <VAR>`, `--store`, `--path`, `--url`, `--yes`. |
+| `memstack connect <claude-code\|codex>` | Registers MemStack with the agent. Checks the server works first, and undoes everything if a step fails. `--dry-run` shows the changes; `--no-hooks` and `--no-agents-md` skip those parts. |
+| `memstack disconnect <claude-code\|codex>` | Removes everything `connect` added. Your memories are kept. |
+| `memstack status` | Config, storage, the current project, and what each agent has connected. |
+| `memstack doctor` | Diagnoses setup problems and prints the fix for each. `--live` also tests the LLM key. |
+| `memstack memories [query]` | Lists or searches this project's memories. `--global` for global ones, `--delete <id>` to remove one. |
+| `memstack project` | Shows this repository's project ID. `project pin <id>` fixes it in `.memstack.json`; `project merge <old-id>` moves memories from an old ID. |
+
+### What `connect` changes
+
+`connect` changes only these entries, backs up each file first, and
+`disconnect` restores each file exactly:
+
+| Agent | File | Change |
+|---|---|---|
+| Claude Code | `~/.claude.json` | A user-scope `memstack` MCP server, added with `claude mcp add-json`. |
+| Claude Code | `~/.claude/settings.json` | A `SessionStart` hook running `memstack-mcp hook session-start`. |
+| Codex | `~/.codex/config.toml` | A `memstack` MCP server, added with `codex mcp add`. |
+| Codex | `~/.codex/hooks.json` | A `SessionStart` hook. Codex runs it after you approve it once with `/hooks`. |
+| Codex | `~/.codex/AGENTS.md` | A short block between `memstack:begin`/`memstack:end` markers telling Codex to save memories with `memory_store`. |
+
+The registered command is the `memstack-mcp` you installed, run by absolute
+path, so it works even when the agent starts without your shell's `PATH`.
+Restart Claude Code, or start a new Codex session, to load it.
+
+### Projects
+
+The project ID comes from the repository itself, with nothing stored, so it
+stays the same across clones, worktrees, renamed remotes, moved folders, new
+machines, and storage switches:
+
+1. a pinned ID in `.memstack.json` at the repository root
+   (`memstack project pin <id>`; commit it to share it with your team);
+2. otherwise, the repository's first commit;
+3. for shallow clones, the `origin` remote;
+4. for repositories without commits, the git directory, and outside git, the
+   folder. Memories saved before a repository's first commit move to the new
+   ID automatically.
+
+A fork shares its first commit with the original repository, so on one store
+the two share memories until one of them runs `memstack project pin`.
+
+### Storage
+
+Any supported store works; pick it in `memstack init`. MemStack never installs
+storage drivers: install the one you need alongside `@memstack/mcp`.
+
+| Store | Driver to install | Notes |
+|---|---|---|
+| `sqlite` | `better-sqlite3@^11.10.0` | Default; one local file, safe for both agents at once. |
+| `postgres` | `postgres@^3.4.9` | Shared across machines. |
+| `redis` | `ioredis@^5.11.1` | |
+| `disk`, `markdown` | none | Single process only; `doctor` warns when both agents use them. |
+
+Switching stores keeps project IDs; move memories with `memstack export` and
+`memstack import`.
+
+### Troubleshooting
+
+Run `memstack doctor` first; it checks the config file and its permissions,
+the LLM key, the storage driver, each agent's registration, hook, and
+guidance, and starts the server to confirm it answers.
+
+- **"memstack-mcp is not installed" or a missing driver:** run the
+  `npm install -g …` command it prints.
+- **Codex doesn't load memories at session start:** approve the MemStack hook
+  in Codex with `/hooks`.
+- **Codex doesn't save when asked:** check `memstack status` shows the
+  `AGENTS.md` guidance as present; reconnect if not.
+- **Memories seem missing:** `memstack project` shows which project you are
+  in. Use `memstack project merge <old-id>` to bring memories from an old ID.
+
+Details on the MCP server itself: [docs/MCP_SETUP.md](docs/MCP_SETUP.md#harness-profile-claude-code-and-codex).
 
 ---
 
@@ -946,6 +1054,39 @@ const status = await ms.health();
 await ms.close(); // graceful shutdown
 ```
 
+### Harness Memory API
+
+The harness features are built on `HarnessMemory`, which works with any
+storage adapter. Use it to build your own agent integration:
+
+```typescript
+import { HarnessMemory, defaultRecallNamespaces, projectNamespace } from "@memstack/core";
+
+const memory = new HarnessMemory({ storage, llm });
+
+await memory.remember({
+  namespace: projectNamespace("acme-api"),   // or "global"
+  content: "This project uses Hono",
+  kind: "decision",                           // fact | preference | decision | instruction | observation | ...
+  source: { harness: "my-agent", project: "acme-api" },
+});
+
+const { hits, fallback } = await memory.recall({
+  namespaces: defaultRecallNamespaces("acme-api"), // project, then global
+  query: "Which framework do we use?",
+  limit: 10,
+  maxChars: 8000,
+});
+
+await memory.get(id, namespaces);       // null outside namespaces
+await memory.forget(id, namespaces);    // refuses ids outside namespaces
+await memory.stats(namespaces);         // { "project:acme-api": 3, global: 1 }
+await memory.moveNamespace(from, to);   // e.g. when a project's ID changes
+```
+
+`remember` asks the LLM for topic tags (disable with `autoTags: false`); every
+other method makes no LLM call. `recall` uses [`LexicalRetriever`](#keyword-recall-on-any-storage-adapter).
+
 ---
 
 ## Configuration
@@ -976,6 +1117,26 @@ const ms = new MemStack({
   },
 });
 ```
+
+### Harness configuration file
+
+The CLI and the MCP harness profile read `~/.memstack/config.json` (or
+`$MEMSTACK_HOME/config.json`), which `memstack init` writes with permissions
+readable only by you:
+
+```json
+{
+  "version": 1,
+  "llm": { "provider": "openai-compatible", "apiKey": "…", "baseURL": "https://api.deepseek.com", "model": "deepseek-flash" },
+  "storage": { "type": "sqlite", "path": "/Users/you/.memstack/memstack.db" }
+}
+```
+
+Environment variables override the file one section at a time: any LLM
+variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `MEMSTACK_OPENAI_BASE_URL`,
+`MEMSTACK_LLM_MODEL`) replaces the whole `llm` section, and `MEMSTACK_STORAGE`
+replaces the whole `storage` section, so a key is never sent to another
+provider's URL.
 
 ---
 

@@ -19,6 +19,7 @@ This doc collects copy-pasteable config for as many MCP clients as we could veri
 - [Harness profile (Claude Code and Codex)](#harness-profile-claude-code-and-codex)
 - [Client-specific setup](#client-specific-setup)
   - [Claude Code](#claude-code)
+  - [Codex](#codex)
   - [Claude Desktop](#claude-desktop)
   - [Cursor](#cursor)
   - [Windsurf](#windsurf)
@@ -206,6 +207,17 @@ client's name.
 
 Docs: [code.claude.com/docs/en/mcp](https://code.claude.com/docs/en/mcp)
 
+**Recommended: `memstack connect`.** For memory shared with Codex, scoped per
+project and loaded at session start, use the
+[harness profile](#harness-profile-claude-code-and-codex):
+
+```bash
+npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0
+memstack init && memstack connect claude-code
+```
+
+To configure the default 18-tool profile by hand instead:
+
 **CLI (fastest):**
 ```bash
 claude mcp add --transport stdio memstack \
@@ -234,6 +246,40 @@ claude mcp add --transport stdio memstack \
 **Verify:** `claude mcp list`, or `/mcp` inside a session to see live connection status and the tool list.
 
 ---
+
+### Codex
+
+Docs: [Codex MCP](https://developers.openai.com/codex/mcp)
+
+**Recommended: `memstack connect`.** It registers the
+[harness profile](#harness-profile-claude-code-and-codex), adds a
+session-start hook, and adds guidance to `~/.codex/AGENTS.md` so Codex saves
+memories when asked:
+
+```bash
+npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0
+memstack init && memstack connect codex
+```
+
+Then open Codex and approve the MemStack hook once with `/hooks`.
+
+To configure the default 18-tool profile by hand instead:
+
+```bash
+codex mcp add memstack --env MEMSTACK_STORAGE=memory --env OPENAI_API_KEY=sk-... -- npx -y @memstack/mcp
+```
+
+Or in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.memstack]
+command = "npx"
+args = ["-y", "@memstack/mcp"]
+
+[mcp_servers.memstack.env]
+MEMSTACK_STORAGE = "memory"
+OPENAI_API_KEY = "sk-..."
+```
 
 ### Claude Desktop
 
