@@ -41,7 +41,10 @@ for details.
 
 ## Configuration
 
-The memory commands below are configured by environment variables only. Same scheme as @memstack/mcp.
+Every command reads `~/.memstack/config.json` (written by `memstack init`),
+overlaid with these environment variables: any LLM variable replaces the
+file's LLM settings, and `MEMSTACK_STORAGE` replaces its storage settings.
+`memstack status` shows which source is in use. Same scheme as @memstack/mcp.
 
 | Variable | Purpose | Default |
 |---|---|---|
@@ -59,6 +62,17 @@ The memory commands below are configured by environment variables only. Same sch
 ## Commands
 
 The memory commands below print JSON to stdout. Errors go to stderr.
+`memstack <command> --help` prints a command's flags; `memstack --version`
+prints the installed version.
+
+Inside a code repository, `--project` can replace `--actor` on any of them. It
+uses the repository's project, the same memory Claude Code and Codex share
+through `memstack connect`:
+
+```bash
+memstack store --project --content "Deploy with fly deploy" --type instruction
+memstack retrieve --project --query "deploy"
+```
 
 ### store
 ```bash

@@ -1,5 +1,48 @@
 # Changelog
 
+## v0.8.1
+
+### @memstack/cli
+
+- `memstack <command> --help` (or `-h`, or `memstack help <command>`) prints
+  each command's flags, and `memstack --version` prints the installed version.
+  Before, every command rejected `--help`, though the usage text pointed to it.
+- The memory commands (`store`, `retrieve`, `context`, and the rest) now read
+  `~/.memstack/config.json`, overlaid with environment variables as the harness
+  commands already were. Before, they read only environment variables, so they
+  failed after `memstack init` with no variables set. If you rely on the
+  default in-memory store while a config file exists, set
+  `MEMSTACK_STORAGE=memory`.
+- `--project` replaces `--actor` with the current repository's project, so
+  memories stored from the shell are the ones Claude Code, Codex, and
+  `memstack memories` see.
+- `memstack status` reports configuration that comes from environment
+  variables. Before, it said "Config: none" even when variables configured
+  everything, and agents took that to mean MemStack wasn't set up.
+  `memstack doctor` no longer warns about a missing config file in that case.
+- An unknown command says so before checking the configuration, instead of
+  failing on a missing API key.
+
+- The `memstack connect codex` guidance in `~/.codex/AGENTS.md` now tells
+  Codex to check `memory_retrieve` at the start of a task, not only before
+  answering questions. Asked to "add a deploy script", Codex had asked which
+  platform to use instead of recalling it. Run `memstack connect codex` again
+  to update the block; `memstack doctor` reports it as outdated until then.
+
+### Agent skill
+
+- Inside Claude Code or Codex, the `memstack-cli` skill now sends the agent to
+  `memstack connect` and the `memory_store` and `memory_retrieve` tools, and
+  to `--project` for any shell use. Agents had invented their own actor IDs,
+  which the other harness never saw, and shell writes fail in Codex's default
+  sandbox when the store is outside the workspace.
+
+### Other packages
+
+- `@memstack/core`, `@memstack/config-env`, `@memstack/mcp`, and
+  `@memstack/server` have no changes; they move to 0.8.1 so all packages share
+  one version.
+
 ## v0.8.0
 
 Persistent memory shared by Claude Code and Codex: what you tell one agent,

@@ -15,6 +15,8 @@ const commands = new Set([
   "merge", "stats", "delete", "health", "export", "import",
   // Harness commands (Claude Code and Codex).
   "init", "connect", "disconnect", "status", "doctor", "memories", "project",
+  // Help and version.
+  "help", "--help", "--version",
 ]);
 
 const skill = await readFile(skillPath, "utf8");

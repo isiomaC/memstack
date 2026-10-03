@@ -1,6 +1,12 @@
 # MemStack CLI — Command Reference
 
-All commands output JSON to stdout. Errors go to stderr.
+All commands output JSON to stdout. Errors go to stderr. `memstack <command> --help`
+prints a command's flags, and `memstack --version` the installed version.
+
+Every command reads `~/.memstack/config.json` (written by `memstack init`; or
+`$MEMSTACK_HOME/config.json`). Environment variables override it section by
+section: any LLM variable replaces its `llm` settings, and `MEMSTACK_STORAGE`
+replaces its `storage` settings.
 
 ## store
 
@@ -12,7 +18,8 @@ memstack store --actor "agent-1" --content "User reported login bug"
 
 | Flag | Required | Type | Description |
 |---|---|---|---|
-| `--actor` | yes | string | Actor ID |
+| `--actor` | yes, or `--project` | string | Actor ID |
+| `--project` | no | flag | Use this repository's project instead of an actor: the memory Claude Code and Codex share |
 | `--content` | yes | string | Memory text |
 | `--type` | no | `interaction` \| `summary` \| `observation` \| `fact` \| `reflection` \| `preference` \| `decision` \| `instruction` | Memory classification (default: `interaction`) |
 | `--importance` | no | float 0.0–1.0 | Survival priority |
@@ -30,7 +37,8 @@ memstack retrieve --actor "agent-1" --query "login" --strategy hybrid --limit 5
 
 | Flag | Required | Type | Description |
 |---|---|---|---|
-| `--actor` | yes | string | Actor ID |
+| `--actor` | yes, or `--project` | string | Actor ID |
+| `--project` | no | flag | Use this repository's project instead of an actor: the memory Claude Code and Codex share |
 | `--query` | no | string | Search query (enables semantic/hybrid) |
 | `--strategy` | no | `recent` \| `important` \| `semantic` \| `hybrid` | Default: `recent` |
 | `--limit` | no | integer | Default: 10 |
@@ -50,7 +58,8 @@ memstack context --actor "agent-1" --max-tokens 2000
 
 | Flag | Required | Type | Description |
 |---|---|---|---|
-| `--actor` | yes | string | Actor ID |
+| `--actor` | yes, or `--project` | string | Actor ID |
+| `--project` | no | flag | Use this repository's project instead of an actor: the memory Claude Code and Codex share |
 | `--max-tokens` | no | integer | Token budget (default: 2000) |
 
 Output: `{ "systemPrompt": "## Important Memories\n- ...", "recentMemories": [...], "importantMemories": [...], "tokenEstimate": 280 }`
@@ -65,7 +74,8 @@ memstack summarize --actor "agent-1" --older-than 7d
 
 | Flag | Required | Type | Description |
 |---|---|---|---|
-| `--actor` | yes | string | Actor ID |
+| `--actor` | yes, or `--project` | string | Actor ID |
+| `--project` | no | flag | Use this repository's project instead of an actor: the memory Claude Code and Codex share |
 | `--older-than` | no | duration | `"7d"`, `"24h"`, `"30m"`, `"10s"` |
 
 Output: `{ "summary": { Memory }, "deletedCount": 47 }`
@@ -83,7 +93,8 @@ memstack prune --actor "agent-1" --type byAge --max-age 7d --dry-run
 
 | Flag | Required | Type | Description |
 |---|---|---|---|
-| `--actor` | yes | string | Actor ID |
+| `--actor` | yes, or `--project` | string | Actor ID |
+| `--project` | no | flag | Use this repository's project instead of an actor: the memory Claude Code and Codex share |
 | `--type` | no | `byAge` \| `byImportance` \| `byCount` | Default: `byAge` |
 | `--max-age` | no | duration | For `byAge`: `"30d"`, `"24h"` |
 | `--min-importance` | no | float 0.0–1.0 | For `byImportance` |
@@ -103,7 +114,8 @@ memstack purge --actor "agent-1"
 
 | Flag | Required | Type | Description |
 |---|---|---|---|
-| `--actor` | yes | string | Actor ID |
+| `--actor` | yes, or `--project` | string | Actor ID |
+| `--project` | no | flag | Use this repository's project instead of an actor: the memory Claude Code and Codex share |
 
 Output: `42` (number of deleted memories)
 
@@ -132,6 +144,7 @@ memstack stats --actor "agent-1"
 | Flag | Required | Type | Description |
 |---|---|---|---|
 | `--actor` | no | string | If omitted, returns all actors |
+| `--project` | no | flag | Use this repository's project instead of an actor: the memory Claude Code and Codex share |
 
 Output: `{ "total": 1500, "expired": 3, "oldest": "...", "newest": "...", "avgImportance": 0.6, "byType": { "interaction": 1200, "summary": 300 }, "byActor": { "agent-1": 1500 } }`
 
@@ -173,6 +186,7 @@ memstack export --actor "agent-1" --out ./backup.json
 | Flag | Required | Type | Description |
 |---|---|---|---|
 | `--actor` | no | string | If omitted, exports all actors |
+| `--project` | no | flag | Use this repository's project instead of an actor: the memory Claude Code and Codex share |
 | `--out` | no | string | File path; if omitted, prints to stdout |
 
 Output (stdout): `{ "version": 1, "memories": [...], "exportedAt": "..." }`
@@ -188,7 +202,8 @@ memstack import --actor "agent-1" --file ./backup.json
 
 | Flag | Required | Type | Description |
 |---|---|---|---|
-| `--actor` | yes | string | Target actor ID |
+| `--actor` | yes, or `--project` | string | Target actor ID |
+| `--project` | no | flag | Use this repository's project instead of an actor: the memory Claude Code and Codex share |
 | `--file` | yes | string | JSON file path |
 
 Accepts both snapshot objects (`{ version, memories, exportedAt }`) and plain arrays of Memory objects.
@@ -209,15 +224,14 @@ Durations use `{number}{unit}` suffix: `s` (seconds), `m` (minutes), `h` (hours)
 ## Harness commands
 
 Connect Claude Code and Codex to one memory per project. These print readable
-text (not JSON) and read `~/.memstack/config.json` (or
-`$MEMSTACK_HOME/config.json`) overlaid with environment variables.
+text (not JSON).
 
 | Command | Flags | Description |
 |---|---|---|
 | `memstack init` | `--provider openai-compatible\|anthropic`, `--base-url`, `--model`, `--api-key-env <VAR>`, `--store`, `--path`, `--url`, `--yes` | Choose an LLM provider and store; verifies the key with a real request |
 | `memstack connect <claude-code\|codex>` | `--dry-run`, `--no-hooks`, `--no-agents-md` | Register MemStack, a session-start hook, and (Codex) `AGENTS.md` guidance |
 | `memstack disconnect <claude-code\|codex>` | `--dry-run` | Remove everything `connect` added; memories are kept |
-| `memstack status` | | Config, storage, current project, and connections |
+| `memstack status` | | Where the config comes from (file or environment variables), LLM, storage, current project, and connections |
 | `memstack doctor` | `--live` | Diagnose problems; non-zero exit when any are found |
 | `memstack memories [query]` | `--global`, `--limit <n>`, `--delete <id>` | List or search the current project's memories |
 | `memstack project` | `pin <id>`, `merge <old-id>` | Show, pin, or merge project IDs |

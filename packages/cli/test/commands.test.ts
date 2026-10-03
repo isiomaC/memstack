@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFileSync, spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -36,9 +36,9 @@ function startMockLLM(): Promise<{ server: Server; baseURL: string }> {
 /** Spawned (not sync) — the CLI process talks to an HTTP server running in
  * *this* test process, so a blocking spawnSync would deadlock the event loop
  * the server needs in order to respond. */
-function run(args: string[], env: NodeJS.ProcessEnv): Promise<{ status: number | null; stdout: string; stderr: string }> {
+function run(args: string[], env: NodeJS.ProcessEnv, cwd?: string): Promise<{ status: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [CLI_PATH, ...args], { env });
+    const child = spawn(process.execPath, [CLI_PATH, ...args], { env, cwd });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (d) => (stdout += d));
@@ -58,20 +58,32 @@ function run(args: string[], env: NodeJS.ProcessEnv): Promise<{ status: number |
   });
 }
 
+beforeAll(() => {
+  execFileSync("pnpm", ["exec", "tsup", "src/cli.ts", "--format", "esm", "--clean"], {
+    cwd: PKG_ROOT,
+    stdio: "inherit",
+  });
+}, 30_000);
+
+/** process.env without MemStack and LLM variables, so a developer's own setup can't leak in. */
+function cleanEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !/^(MEMSTACK_|OPENAI_|ANTHROPIC_|SQLITE_PATH$|DATABASE_URL$|REDIS_URL$)/.test(key)),
+  );
+  return { ...env, ...extra };
+}
+
 describe("memstack CLI commands", () => {
   let mockLLM: { server: Server; baseURL: string };
   let dataDir: string;
   let env: NodeJS.ProcessEnv;
 
   beforeAll(async () => {
-    execFileSync("pnpm", ["exec", "tsup", "src/cli.ts", "--format", "esm", "--clean"], {
-      cwd: PKG_ROOT,
-      stdio: "inherit",
-    });
     mockLLM = await startMockLLM();
     dataDir = mkdtempSync(join(tmpdir(), "memstack-cli-test-"));
     env = {
-      ...process.env,
+      ...cleanEnv(),
+      MEMSTACK_HOME: dataDir,
       MEMSTACK_STORAGE: "disk",
       MEMSTACK_DIR: dataDir,
       MEMSTACK_EMBED_ON_STORE: "false",
@@ -244,15 +256,133 @@ describe("memstack CLI commands", () => {
     expect(stderr).toContain("--file is required");
   });
 
-  it("prints usage and exits non-zero for an unknown command", async () => {
+  it("exits non-zero for an unknown command, pointing at --help", async () => {
     const { status, stderr } = await run(["bogus-command"], env);
     expect(status).not.toBe(0);
-    expect(stderr).toContain("memstack <command>");
+    expect(stderr).toContain("Unknown command: bogus-command. Run memstack --help");
   });
 
   it("prints usage and exits non-zero with no command", async () => {
     const { status, stderr } = await run([], env);
     expect(status).not.toBe(0);
     expect(stderr).toContain("memstack <command>");
+  });
+});
+
+describe("help and version", () => {
+  // No LLM key or storage: help must work before anything is configured.
+  const env = cleanEnv({ MEMSTACK_HOME: "/nonexistent-memstack-home" });
+  const commands = ["init", "connect", "disconnect", "status", "doctor", "memories", "project", "store", "retrieve", "context", "summarize", "prune", "purge", "merge", "stats", "delete", "health", "export", "import"];
+
+  it("--version and -v print the package version", async () => {
+    const { version } = JSON.parse(readFileSync(join(PKG_ROOT, "package.json"), "utf8"));
+    for (const flag of ["--version", "-v"]) {
+      const { status, stdout } = await run([flag], env);
+      expect(status).toBe(0);
+      expect(stdout.trim()).toBe(version);
+    }
+  });
+
+  it("--help and -h print top-level usage to stdout", async () => {
+    for (const flag of ["--help", "-h"]) {
+      const { status, stdout } = await run([flag], env);
+      expect(status).toBe(0);
+      expect(stdout).toContain("memstack <command>");
+    }
+  });
+
+  it.each(commands)("%s --help and help %s print that command's flags", async (command) => {
+    for (const args of [[command, "--help"], ["help", command]]) {
+      const { status, stdout, stderr } = await run(args, env);
+      expect(status, stderr).toBe(0);
+      expect(stdout).toContain(`memstack ${command}`);
+    }
+  });
+
+  it("every command in the usage text has help", async () => {
+    const { stdout } = await run(["--help"], env);
+    const listed = [...stdout.matchAll(/^  ([a-z]+) {2,}/gm)].map((m) => m[1]);
+    expect(listed.sort()).toEqual([...commands].sort());
+  });
+
+  it("help for an unknown command fails", async () => {
+    const { status, stderr } = await run(["help", "bogus"], env);
+    expect(status).not.toBe(0);
+    expect(stderr).toContain("Unknown command: bogus");
+  });
+});
+
+describe("--project and the config file", () => {
+  let home: string;
+  let repo: string;
+  let mockLLM: { server: Server; baseURL: string };
+
+  beforeAll(async () => {
+    mockLLM = await startMockLLM();
+    home = mkdtempSync(join(tmpdir(), "memstack-home-"));
+    repo = mkdtempSync(join(tmpdir(), "memstack-repo-"));
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, stdio: "ignore" });
+    git("init", "-q");
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init");
+    writeFileSync(
+      join(home, "config.json"),
+      JSON.stringify({ version: 1, llm: { provider: "openai-compatible", apiKey: "sk-test", baseURL: mockLLM.baseURL }, storage: { type: "disk", path: join(home, "data") } }),
+      { mode: 0o600 },
+    );
+  });
+
+  afterAll(() => {
+    mockLLM?.server.close();
+    for (const d of [home, repo]) if (d) rmSync(d, { recursive: true, force: true });
+  });
+
+  const env = () => cleanEnv({ MEMSTACK_HOME: home, MEMSTACK_EMBED_ON_STORE: "false" });
+
+  it("memory commands read ~/.memstack/config.json when no variables are set", async () => {
+    const { status, stdout, stderr } = await run(["store", "--actor", "a", "--content", "from the config file"], env(), repo);
+    expect(status, stderr).toBe(0);
+    expect(JSON.parse(stdout).content).toBe("from the config file");
+  });
+
+  it("--project stores under this repository's project, which memstack memories lists", async () => {
+    const project = await run(["project"], env(), repo);
+    const id = project.stdout.match(/[0-9a-f]{16}/)?.[0];
+    expect(id).toBeDefined();
+
+    const stored = await run(["store", "--project", "--content", "staging is at staging.example.dev"], env(), repo);
+    expect(stored.status, stored.stderr).toBe(0);
+    expect(JSON.parse(stored.stdout).actorId).toBe(`project:${id}`);
+
+    const listed = await run(["memories"], env(), repo);
+    expect(listed.stdout).toContain("staging is at staging.example.dev");
+  });
+
+  it("rejects --project together with --actor", async () => {
+    const { status, stderr } = await run(["store", "--project", "--actor", "a", "--content", "x"], env(), repo);
+    expect(status).not.toBe(0);
+    expect(stderr).toContain("either --actor or --project");
+  });
+
+  it("status says when environment variables configure MemStack without a config file", async () => {
+    const empty = mkdtempSync(join(tmpdir(), "memstack-empty-"));
+    try {
+      const vars = cleanEnv({ MEMSTACK_HOME: empty, OPENAI_API_KEY: "sk-test", MEMSTACK_LLM_MODEL: "m1", MEMSTACK_STORAGE: "sqlite", SQLITE_PATH: "/data/m.db", PATH: "/usr/bin:/bin" });
+      const { stdout } = await run(["status"], vars, repo);
+      expect(stdout).toMatch(/Config: +none, using environment variables/);
+      expect(stdout).toMatch(/LLM: +openai-compatible \(m1\) \(from environment variables\)/);
+      expect(stdout).toMatch(/Storage: +sqlite at \/data\/m\.db \(from environment variables\)/);
+
+      const none = await run(["status"], cleanEnv({ MEMSTACK_HOME: empty, PATH: "/usr/bin:/bin" }), repo);
+      expect(none.stdout).toMatch(/Config: +none \(run `memstack init`\)/);
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
+  it("status reports the config file and marks sections the environment overrides", async () => {
+    const { stdout } = await run(["status"], cleanEnv({ MEMSTACK_HOME: home, MEMSTACK_STORAGE: "memory", PATH: "/usr/bin:/bin" }), repo);
+    expect(stdout).toContain(`Config:       ${join(home, "config.json")}`);
+    expect(stdout).toMatch(/LLM: +openai-compatible at http:\/\/127\.0\.0\.1:\d+\n/);
+    expect(stdout).toMatch(/Storage: +memory \(lost when the process exits\) \(from environment variables\)/);
   });
 });

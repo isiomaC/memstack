@@ -271,9 +271,19 @@ const label = (name: string) => (name ? `${name}:` : "").padEnd(14);
 
 async function status(): Promise<number> {
   const file = readConfigFile();
-  out(`${label("Config")}${file ? configFilePath() : "none (run `memstack init`)"}`);
-  if (file?.llm) out(`${label("LLM")}${file.llm.provider}${file.llm.model ? ` (${file.llm.model})` : ""}${file.llm.baseURL ? ` at ${file.llm.baseURL}` : ""}`);
-  if (file?.storage) out(`${label("Storage")}${file.storage.type}${file.storage.path ? ` at ${file.storage.path}` : file.storage.url ? " (URL configured)" : ""}`);
+  const fromEnv = envOverrides();
+  const config = file ? configFilePath() : fromEnv.llm || fromEnv.storage ? "none, using environment variables" : "none (run `memstack init`)";
+  out(`${label("Config")}${config}`);
+  const env = mergeConfigFile(file, process.env);
+  const envNote = (overridden: boolean) => (overridden ? " (from environment variables)" : "");
+  if (env.OPENAI_API_KEY || env.ANTHROPIC_API_KEY) {
+    const provider = env.ANTHROPIC_API_KEY ? "anthropic" : "openai-compatible";
+    const baseURL = provider === "openai-compatible" ? env.MEMSTACK_OPENAI_BASE_URL : undefined;
+    out(`${label("LLM")}${provider}${env.MEMSTACK_LLM_MODEL ? ` (${env.MEMSTACK_LLM_MODEL})` : ""}${baseURL ? ` at ${baseURL}` : ""}${envNote(fromEnv.llm)}`);
+  } else if (file || fromEnv.llm) {
+    out(`${label("LLM")}no API key (run \`memstack init\`)`);
+  }
+  if (env.MEMSTACK_STORAGE) out(`${label("Storage")}${describeStorage(env)}${envNote(fromEnv.storage)}`);
 
   const project = resolveProject();
   out(`${label("Project")}${project.id} (${describeSource(project.source)}: ${project.key})`);
@@ -305,6 +315,23 @@ async function status(): Promise<number> {
   return 0;
 }
 
+/** Which config file sections environment variables replace; see mergeConfigFile. */
+function envOverrides(): { llm: boolean; storage: boolean } {
+  return {
+    llm: ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "MEMSTACK_OPENAI_BASE_URL", "MEMSTACK_LLM_MODEL"].some((key) => process.env[key] !== undefined),
+    storage: process.env.MEMSTACK_STORAGE !== undefined,
+  };
+}
+
+function describeStorage(env: Record<string, string | undefined>): string {
+  const type = env.MEMSTACK_STORAGE!;
+  if (type === "memory") return "memory (lost when the process exits)";
+  const path = type === "sqlite" ? env.SQLITE_PATH : type === "disk" || type === "markdown" ? env.MEMSTACK_DIR : undefined;
+  if (path) return `${type} at ${path}`;
+  const url = type === "postgres" ? env.DATABASE_URL : type === "redis" ? env.REDIS_URL : undefined;
+  return url ? `${type} (URL configured)` : type;
+}
+
 function hookState(adapter: ReturnType<typeof harnessAdapter>, mcp: string | null): string {
   const current = readHook(adapter.sessionHook!.path);
   if (!current) return "missing";
@@ -327,6 +354,7 @@ async function doctor(flags: HarnessFlags): Promise<number> {
   try {
     file = readConfigFile();
     if (file) pass(`Config file ${configFilePath()}`);
+    else if (envOverrides().llm || envOverrides().storage) pass(`Using environment variables (no config file at ${configFilePath()})`);
     else warn(`No config file at ${configFilePath()}; run \`memstack init\`.`);
   } catch (error) {
     fail((error as Error).message);
