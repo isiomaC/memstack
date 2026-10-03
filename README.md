@@ -5,6 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/@memstack/core)](https://www.npmjs.com/package/@memstack/core)
 [![skills.sh](https://skills.sh/b/isiomaC/memstack)](https://skills.sh/isiomaC/memstack)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-%40memstack%2Fmcp-blueviolet)](https://registry.modelcontextprotocol.io/?q=io.github.isiomaC%2Fmemstack)
+[![memstack MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/isiomaC/memstack/badges/score.svg)](https://glama.ai/mcp/servers/isiomaC/memstack)
 [![CI](https://github.com/isiomaC/memstack/actions/workflows/ci.yml/badge.svg)](https://github.com/isiomaC/memstack/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP Reference](https://img.shields.io/badge/MCP-LLM%20Reference-blue)](https://gitmcp.io/isiomaC/memstack)
@@ -24,6 +25,8 @@ npx skills add isiomaC/memstack
 **What MemStack does:** A persistent memory pipeline that lives between your agent and the LLM. It stores every interaction, retrieves only what's relevant, summarizes old memories to save tokens, and prunes stale ones automatically. One method call, no infrastructure required.
 
 Think of it as the open-source alternative to [Mem0](https://mem0.ai/) — pluggable storage, bring your own LLM, zero vendor lock-in.
+
+[![memstack MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/isiomaC/memstack/badges/card.svg)](https://glama.ai/mcp/servers/isiomaC/memstack)
 
 ---
 
