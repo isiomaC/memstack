@@ -12,7 +12,7 @@ export const CODEX_INSTRUCTIONS = [
   "## Project memory (MemStack)",
   "",
   "When the user asks you to remember something, save it with the memstack `memory_store` tool. Do not only acknowledge it, and do not write it into project files unless the user asks for a file change.",
-  "Before answering questions about this project's conventions, decisions, or the user's preferences, check `memory_retrieve`.",
+  "At the start of a task, and before answering questions about this project's conventions, decisions, or the user's preferences, check `memory_retrieve`: it holds what earlier sessions, in Codex or other agents, were told to remember.",
 ].join("\n");
 
 export function renderBlock(body: string, harness: string): string {

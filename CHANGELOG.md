@@ -23,6 +23,12 @@
 - An unknown command says so before checking the configuration, instead of
   failing on a missing API key.
 
+- The `memstack connect codex` guidance in `~/.codex/AGENTS.md` now tells
+  Codex to check `memory_retrieve` at the start of a task, not only before
+  answering questions. Asked to "add a deploy script", Codex had asked which
+  platform to use instead of recalling it. Run `memstack connect codex` again
+  to update the block; `memstack doctor` reports it as outdated until then.
+
 ### Agent skill
 
 - Inside Claude Code or Codex, the `memstack-cli` skill now sends the agent to
