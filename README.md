@@ -14,11 +14,11 @@
 # Use MemStack in your application
 npm install @memstack/core
 
-# Give your coding agent the MemStack skill
-npx skills add isiomaC/memstack
+# Give your coding agents the MemStack skill (-g: every project; omit it for this project only)
+npx skills add isiomaC/memstack -g
 ```
 
-`@memstack/core` is the runtime SDK; the Agent Skill teaches compatible coding agents how to integrate and operate MemStack correctly.
+`@memstack/core` is the runtime SDK; the Agent Skill teaches compatible coding agents how to integrate and operate MemStack correctly. Without `-g`, the skill installs into the current project (`.agents/skills/`, plus a `.claude/skills/` link for Claude Code). Update it later with `npx skills update`.
 
 **The problem:** AI agents forget. Every interaction starts from zero. You either stuff everything into the context window (expensive, slow, degrades output quality) or the agent has no memory of past conversations.
 
