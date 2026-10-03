@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.8.1
 
 ### @memstack/cli
 
@@ -30,6 +30,12 @@
   to `--project` for any shell use. Agents had invented their own actor IDs,
   which the other harness never saw, and shell writes fail in Codex's default
   sandbox when the store is outside the workspace.
+
+### Other packages
+
+- `@memstack/core`, `@memstack/config-env`, `@memstack/mcp`, and
+  `@memstack/server` have no changes; they move to 0.8.1 so all packages share
+  one version.
 
 ## v0.8.0
 
