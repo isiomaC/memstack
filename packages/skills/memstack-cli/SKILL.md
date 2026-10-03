@@ -5,7 +5,41 @@ description: Persistent cross-session memory for AI agents using the @memstack/c
 
 # MemStack CLI
 
-## Quick start
+## Inside Claude Code or Codex
+
+Use MemStack's built-in integration, not the shell commands further down. It
+gives you project-scoped `memory_store` and `memory_retrieve` tools, loads key
+memories at the start of every session, and shares one memory per repository
+between Claude Code and Codex.
+
+1. Run `memstack status`.
+2. If your harness shows `connected`, use the `memory_store` and
+   `memory_retrieve` tools. When the user says "remember…", store it with
+   `memory_store`, not in a file. You're done; skip the rest of this skill.
+3. If it isn't connected, set it up. The packages are installed by the user,
+   because MemStack never installs storage drivers:
+
+   ```bash
+   npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0
+   memstack init                  # LLM provider + store; flags: memstack init --help
+   memstack connect claude-code   # and/or: memstack connect codex
+   memstack doctor                # verifies the setup and prints fixes
+   ```
+
+   Then tell the user to restart the harness (in Codex, approve the
+   session-start hook once with `/hooks`).
+
+If you must use the shell anyway, for example before the restart, pass
+`--project` instead of `--actor`. That stores into the same project memory the
+tools and `memstack memories` use. Don't invent an actor ID for a project:
+those memories never reach the other harness. In Codex's default sandbox, shell
+writes to a store outside the workspace fail; use the tools instead.
+
+`memstack memories [query]` lists the current project's memories,
+`memstack status` shows what is connected, and `memstack disconnect <harness>`
+removes it. These commands print readable text.
+
+## Other agents: quick start
 
 Install and verify:
 
@@ -15,29 +49,15 @@ memstack health
 # {"storage":true,"llm":true,"embedding":true}
 ```
 
-All output is JSON to stdout. Errors go to stderr.
-
-## Coding agents (Claude Code, Codex)
-
-Inside Claude Code or Codex, prefer the built-in integration over calling the
-memory commands by hand. It gives the agent project-scoped memory tools and
-loads key memories at the start of every session:
-
-```bash
-npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0
-memstack init                  # LLM provider + store
-memstack connect claude-code   # and/or: memstack connect codex
-memstack doctor                # verifies the setup and prints fixes
-```
-
-Then use the `memory_store` and `memory_retrieve` tools it adds. `memstack
-memories [query]` lists the current project's memories, `memstack status`
-shows what is connected, and `memstack disconnect <harness>` removes it. These
-commands print readable text and read `~/.memstack/config.json`.
+All output is JSON to stdout. Errors go to stderr. `memstack <command> --help`
+prints a command's flags.
 
 ## Configuration
 
-The memory commands below are configured by environment variables. At minimum, set an LLM API key:
+Every command reads `~/.memstack/config.json`, written by `memstack init`.
+Environment variables override it: any LLM variable replaces its LLM settings,
+and `MEMSTACK_STORAGE` replaces its storage settings. `memstack status` shows
+which source is in use. Without either, set at least an LLM API key:
 
 ```bash
 export OPENAI_API_KEY=sk-...          # OpenAI LLM + embeddings
@@ -114,7 +134,7 @@ Valid strategies: `recent`, `important`, `semantic`, `hybrid`. Without `--query`
 
 ## Best practices
 
-- **Actor ID convention**: Use consistent IDs — `"agent-name"`, `"project/thread"`, or `"user-id"`. Same ID groups related memories.
+- **Actor ID convention**: In a code repository, use `--project`. Otherwise use consistent IDs — `"agent-name"`, `"project/thread"`, or `"user-id"`. Same ID groups related memories.
 - **Importance scoring**: 0.0–1.0. `>0.7` for critical info (preferences, decisions), `0.3–0.7` for useful context, `<0.3` for routine exchanges.
 - **Memory types**: `--type preference`, `decision`, or `instruction` for durable choices and rules; `fact` and `observation` for knowledge; `interaction` for routine exchanges.
 - **Token budget**: Defaults to 2000. For long-running agents, use 800–1500 to leave room for the conversation.

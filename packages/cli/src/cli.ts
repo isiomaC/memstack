@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
 import { writeFile, readFile } from "node:fs/promises";
-import { MemStack } from "@memstack/core";
+import { createRequire } from "node:module";
+import { MemStack, projectNamespace } from "@memstack/core";
+import { resolveProject } from "@memstack/config-env";
 import type { MemStackConfig, MemoryType, PruneStrategy } from "@memstack/core";
 import { loadConfig } from "./config.js";
 import { HARNESS_COMMANDS, runHarnessCommand } from "./harness-commands.js";
+import { COMMAND_HELP } from "./help.js";
 
 // Exit quietly when the reader goes away, e.g. `memstack status | head -1`.
 process.stdout.on("error", (error: NodeJS.ErrnoException) => {
@@ -49,12 +52,26 @@ async function main() {
       delete: { type: "string" },
       "no-agents-md": { type: "boolean" },
       "no-hooks": { type: "boolean" },
+      project: { type: "boolean" },
+      help: { type: "boolean", short: "h" },
+      version: { type: "boolean", short: "v" },
     },
   });
 
+  if (values.version) {
+    process.stdout.write(`${version()}\n`);
+    return;
+  }
+
   const command = positionals[0];
+  if (command === "help" || values.help) {
+    const topic = command === "help" ? positionals[1] : command;
+    if (topic && !COMMAND_HELP[topic]) fail(`Unknown command: ${topic}. Run memstack --help for the list.`);
+    process.stdout.write(topic ? COMMAND_HELP[topic] : USAGE);
+    return;
+  }
   if (!command) {
-    printUsage();
+    process.stderr.write(USAGE);
     process.exit(1);
   }
 
@@ -63,13 +80,20 @@ async function main() {
     return;
   }
 
+  if (!COMMAND_HELP[command]) fail(`Unknown command: ${command}. Run memstack --help for the list.`);
+
+  if (values.project) {
+    if (values.actor) fail("Use either --actor or --project, not both");
+    values.actor = projectNamespace(resolveProject().id);
+  }
+
   const config: MemStackConfig = await loadConfig();
   const ms = new MemStack(config);
 
   let result: unknown;
   switch (command) {
     case "store": {
-      if (!values.actor) fail("--actor is required");
+      if (!values.actor) fail("--actor (or --project) is required");
       if (!values.content) fail("--content is required");
       const importance = values.importance ? Math.max(0, Math.min(1, Number(values.importance))) : undefined;
       result = await ms.memory.store({
@@ -88,7 +112,7 @@ async function main() {
     }
 
     case "retrieve": {
-      if (!values.actor) fail("--actor is required");
+      if (!values.actor) fail("--actor (or --project) is required");
       result = await ms.memory.retrieve({
         actorId: values.actor as string | undefined,
         query: values.query as string | undefined,
@@ -106,7 +130,7 @@ async function main() {
     }
 
     case "context": {
-      if (!values.actor) fail("--actor is required");
+      if (!values.actor) fail("--actor (or --project) is required");
       result = await ms.memory.compileContext({
         actorId: String(values.actor),
         maxTokens: values["max-tokens"] ? Number(values["max-tokens"]) : undefined,
@@ -115,7 +139,7 @@ async function main() {
     }
 
     case "summarize": {
-      if (!values.actor) fail("--actor is required");
+      if (!values.actor) fail("--actor (or --project) is required");
       const durationMs = values["older-than"]
         ? parseDuration(String(values["older-than"]))
         : undefined;
@@ -128,7 +152,7 @@ async function main() {
     }
 
     case "prune": {
-      if (!values.actor) fail("--actor is required");
+      if (!values.actor) fail("--actor (or --project) is required");
       const VALID_TYPES = ["byAge", "byImportance", "byCount", "byType", "custom", "compose"];
       const pruneType = values.type ?? "byAge";
       if (!VALID_TYPES.includes(String(pruneType))) {
@@ -157,7 +181,7 @@ async function main() {
     }
 
     case "purge": {
-      if (!values.actor) fail("--actor is required");
+      if (!values.actor) fail("--actor (or --project) is required");
       result = await ms.memory.purgeActor(String(values.actor));
       break;
     }
@@ -200,7 +224,7 @@ async function main() {
     }
 
     case "import": {
-      if (!values.actor) fail("--actor is required");
+      if (!values.actor) fail("--actor (or --project) is required");
       if (!values.file) fail("--file is required");
       const raw = await readFile(String(values.file), "utf-8");
       let snapshot = JSON.parse(raw);
@@ -216,8 +240,7 @@ async function main() {
     }
 
     default:
-      printUsage();
-      process.exit(1);
+      fail(`Unknown command: ${command}. Run memstack --help for the list.`);
   }
 
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -246,8 +269,11 @@ function parseDuration(input: string): number {
   }
 }
 
-function printUsage() {
-  process.stderr.write(`memstack <command> [flags]
+function version(): string {
+  return (createRequire(import.meta.url)("../package.json") as { version: string }).version;
+}
+
+const USAGE = `memstack <command> [flags]
 
 Agent harnesses (Claude Code, Codex):
   init        Choose an LLM provider and store; writes ~/.memstack/config.json
@@ -274,9 +300,8 @@ Commands:
   export      Export all memories
   import      Import memories from a JSON snapshot
 
-Run memstack <command> --help for flags.
-`);
-}
+Run memstack <command> --help for flags, or memstack --version.
+`;
 
 function fail(message: string): never {
   process.stderr.write(`Error: ${message}\n`);
