@@ -1,0 +1,44 @@
+# MemStack
+
+> Open-source memory for AI agents. For coding agents it provides one shared memory per project: what Claude Code learns, Codex recalls in the same repository, and the reverse. MIT licensed.
+
+MemStack is distributed as four npm packages, a container image and an agent skill. Users install storage drivers themselves; MemStack never bundles or auto-installs them.
+
+## Set up for Claude Code and Codex
+
+    npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0
+    memstack init
+    memstack connect claude-code codex
+    memstack doctor
+
+Restart Claude Code, or start a new Codex session (approve the session-start hook once with /hooks).
+
+## Behaviour agents should follow
+
+- When the user says "remember ...", call memory_store. Do not write it into project files.
+- At the start of a task, and before decisions that depend on history, call memory_retrieve.
+- Store one self-contained statement per memory. Never store secrets, credentials or personal data.
+- Memories are project-scoped. Use scope "global" only for preferences that apply everywhere.
+- The harness profile exposes five tools: memory_store, memory_retrieve, memory_get, memory_delete, memory_stats.
+- Run `memstack status` to see whether this agent is connected, and `memstack doctor` to diagnose problems.
+
+## Docs
+
+- [README](https://github.com/isiomaC/memstack/blob/main/README.md): harness memory, the memory pipeline, adapters, API reference
+- [MCP setup for every client](https://github.com/isiomaC/memstack/blob/main/docs/MCP_SETUP.md): config for Claude Code, Codex, Claude Desktop, Cursor, Windsurf, Cline, Continue, VS Code, Zed, opencode, Gemini CLI, Goose
+- [MCP server reference](https://github.com/isiomaC/memstack/blob/main/packages/mcp/README.md): tools, resources, prompts, transports
+- [Agent skill](https://skills.sh/isiomaC/memstack): install with `npx skills add isiomaC/memstack -g`
+
+## Packages
+
+- [@memstack/cli](https://www.npmjs.com/package/@memstack/cli): init, connect, disconnect, status, doctor, memories, project
+- [@memstack/mcp](https://www.npmjs.com/package/@memstack/mcp): the MCP server; `--profile harness` for coding agents
+- [@memstack/core](https://www.npmjs.com/package/@memstack/core): the TypeScript SDK
+- [@memstack/server](https://www.npmjs.com/package/@memstack/server): REST API; image at ghcr.io/isiomac/memstack-server
+
+## Listings
+
+- [MCP Registry](https://registry.modelcontextprotocol.io/?q=io.github.isiomaC%2Fmemstack)
+- [Glama](https://glama.ai/mcp/servers/isiomaC/memstack)
+- [GitMCP](https://gitmcp.io/isiomaC/memstack)
+- [Source](https://github.com/isiomaC/memstack)
