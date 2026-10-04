@@ -265,9 +265,16 @@ every later session.
 - **Scope.** Memories belong to the current project. Preferences that apply
   everywhere can be saved as global (`scope: "global"`) and are recalled in
   every project. One project can never read or delete another's memories.
-- **Safety.** Agents don't get bulk or destructive tools, secrets are never to
-  be stored (the agents are told so), and the LLM key stays in
-  `~/.memstack/config.json` (readable only by you), never in agent configs.
+- **Safety.** Agents don't get bulk or destructive tools, and the LLM key stays
+  in `~/.memstack/config.json` (readable only by you), never in agent configs.
+  Agents are told never to store secrets, and MemStack checks too: a memory
+  that contains a credential (a private key, a cloud or source-host token, a
+  JWT, a password in a connection string, a `password = "..."` assignment) is
+  refused before the LLM or the store sees it, and the error names the kind of
+  secret without repeating it. The check is pattern-based, so a secret in a
+  format it doesn't know will pass; `MEMSTACK_SECRET_POLICY=redact` stores the
+  memory with `[REDACTED:<kind>]` in place of the secret, and `off` disables
+  the check.
 
 ### Commands
 

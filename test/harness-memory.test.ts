@@ -197,3 +197,46 @@ describe("HarnessMemory", () => {
     expect(init).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("HarnessMemory secret policy", () => {
+  const secret = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8";
+  const base = { namespace: "project:abc", source };
+
+  it("rejects a memory with a secret by default, names the kind, and never calls the LLM", async () => {
+    const storage = new InMemoryStorageAdapter();
+    const llm = fakeLlm('["deploy"]');
+    const harness = new HarnessMemory({ storage, llm });
+
+    const error = await harness.remember({ ...base, content: `Deploy with ${secret}` }).catch((e) => e);
+
+    expect(error.code).toBe("VALIDATION_ERROR");
+    expect(error.message).toContain("github-token");
+    expect(error.message).not.toContain(secret);
+    expect(llm.complete).not.toHaveBeenCalled();
+    expect(await storage.count({ actorId: "project:abc" })).toBe(0);
+  });
+
+  it("rejects a secret smuggled in through a tag", async () => {
+    const harness = new HarnessMemory({ storage: new InMemoryStorageAdapter(), llm: fakeLlm("[]") });
+    await expect(harness.remember({ ...base, content: "Deploys use a token", tags: [secret] })).rejects.toThrow(/secret/);
+  });
+
+  it("redacts before the LLM and storage see the text when the policy is redact", async () => {
+    const storage = new InMemoryStorageAdapter();
+    const llm = fakeLlm('["deploy"]');
+    const harness = new HarnessMemory({ storage, llm, secretPolicy: "redact" });
+
+    const memory = await harness.remember({ ...base, content: `Deploy with ${secret}` });
+
+    expect(memory.content).toBe("Deploy with [REDACTED:github-token]");
+    expect(memory.metadata).toMatchObject({ redacted: ["github-token"] });
+    expect(llm.complete.mock.calls[0][0].user).not.toContain(secret);
+    expect(JSON.stringify(await storage.retrieve({ actorId: "project:abc", limit: 10 }))).not.toContain(secret);
+  });
+
+  it("stores the text unchanged when the policy is off", async () => {
+    const harness = new HarnessMemory({ storage: new InMemoryStorageAdapter(), llm: fakeLlm("[]"), secretPolicy: "off" });
+    const memory = await harness.remember({ ...base, content: `Deploy with ${secret}` });
+    expect(memory.content).toContain(secret);
+  });
+});

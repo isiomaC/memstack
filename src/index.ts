@@ -40,6 +40,10 @@ export { HarnessMemory } from "./harness/HarnessMemory.js";
 export type { HarnessMemoryConfig, RememberInput, HarnessRecallInput } from "./harness/HarnessMemory.js";
 export { GLOBAL_NAMESPACE, projectNamespace, sessionNamespace, defaultRecallNamespaces } from "./harness/namespaces.js";
 
+// Secret filtering
+export { scanSecrets, redactSecrets, filterSecrets } from "./security/secrets.js";
+export type { SecretKind, SecretMatch, SecretPolicy, SecretFilterResult } from "./security/secrets.js";
+
 // Errors
 export { MemStackError, notFound, validationError, storageError, configError } from "./errors.js";
 export type { MemStackErrorCode } from "./errors.js";
