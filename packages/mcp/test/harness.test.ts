@@ -119,7 +119,6 @@ describe("harness MCP profile", () => {
 
   it.each([
     ["memory_store", {}, /content/],
-    ["memory_store", { content: "x", actorId: "project:p2" }, /actorId/],
     ["memory_store", { content: "x", importance: 2 }, /importance/],
     ["memory_store", { content: "x", scope: "project:p2" }, /scope/],
     ["memory_retrieve", { limit: 100 }, /limit/],
@@ -129,6 +128,21 @@ describe("harness MCP profile", () => {
     const result = await call(name, args);
     expect(result.isError).toBe(true);
     expect(textOf(result)).toMatch(message);
+  });
+
+  it("ignores unknown arguments, says so, and never lets them choose the project", async () => {
+    const { call } = await connect(storage, "p1");
+    const stored = await call("memory_store", { content: "Deploys use fly deploy", actorId: "project:p2", project_id: "p2" });
+    expect(stored.isError).toBeFalsy();
+    expect(textOf(stored)).toMatch(/Ignored unknown arguments: actorId, project_id\. The project comes from the working directory\./);
+    expect(await storage.retrieve({ actorId: "project:p2" })).toHaveLength(0);
+    expect(await storage.retrieve({ actorId: "project:p1" })).toHaveLength(1);
+
+    // A model adding project_id to memory_retrieve still gets its memories on the first call.
+    const recalled = await call("memory_retrieve", { query: "deploy", project_id: "p1" });
+    expect(recalled.isError).toBeFalsy();
+    expect(textOf(recalled)).toMatch(/Deploys use fly deploy/);
+    expect(textOf(recalled)).toMatch(/Ignored unknown argument: project_id\./);
   });
 
   it("caps memory_retrieve output", async () => {

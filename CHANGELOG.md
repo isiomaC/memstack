@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### @memstack/mcp
+
+- The harness tools ignore unknown arguments instead of failing the call, and
+  their reply names what was ignored. Models sometimes add fields such as
+  `project_id`: Codex's first `memory_retrieve` failed with
+  `Unrecognized key: "project_id"` and had to retry. Unknown arguments still
+  can't choose the project, which always comes from the working directory.
+
+### Docs
+
+- The README opens with the Claude Code and Codex demo and the harness setup.
+
 ## v0.8.1
 
 ### @memstack/cli

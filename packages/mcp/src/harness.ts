@@ -37,16 +37,22 @@ const StoreArgs = z.object({
   importance: z.number().min(0).max(1).optional().describe("0 to 1. Default 0.5; use 0.8+ for rules that must not be missed."),
   tags: z.array(z.string().trim().min(1).max(40)).max(10).optional().describe("Optional topic tags. MemStack adds its own."),
   scope: z.enum(["project", "global"]).default("project").describe('"global" only for preferences that apply to every project.'),
-}).strict();
+});
 
 const RetrieveArgs = z.object({
   query: z.string().max(1000).optional().describe("Natural-language question or keywords. Omit to get the most important memories."),
   limit: z.number().int().min(1).max(25).default(10).describe("Maximum memories to return."),
   kinds: z.array(z.enum(KINDS)).optional().describe("Only return these kinds."),
-}).strict();
+});
 
-const IdArgs = z.object({ id: z.string().min(1).max(200) }).strict();
-const NoArgs = z.object({}).strict();
+const IdArgs = z.object({ id: z.string().min(1).max(200) });
+const NoArgs = z.object({});
+
+// Unknown arguments are dropped rather than rejected: models sometimes add
+// fields such as project_id, and failing the whole call for that wastes a
+// turn. Dropping them is safe because the project always comes from the
+// server's working directory, never from arguments. The reply names what was
+// ignored so the model learns the real schema.
 
 const TOOLS = [
   {
@@ -95,15 +101,25 @@ export function createHarnessServer({ memory, projectId, harness, cwd }: Harness
     const tool = TOOLS.find((t) => t.name === request.params.name);
     if (!tool) return failure(`Unknown tool: ${request.params.name}`);
 
-    const parsed = tool.schema.safeParse(request.params.arguments ?? {});
+    const raw = request.params.arguments ?? {};
+    const parsed = tool.schema.safeParse(raw);
     if (!parsed.success) {
       return failure(`Invalid arguments for ${tool.name}: ${z.prettifyError(parsed.error)}`);
     }
+    const ignored = Object.keys(raw).filter((key) => !(key in tool.schema.shape));
+    const result = await runTool(tool.name, parsed.data);
+    if (ignored.length > 0 && !result.isError) {
+      const note = `Ignored unknown argument${ignored.length === 1 ? "" : "s"}: ${ignored.join(", ")}. The project comes from the working directory.`;
+      result.content.push({ type: "text", text: note });
+    }
+    return result;
+  });
 
+  async function runTool(name: (typeof TOOLS)[number]["name"], data: unknown): Promise<ToolResult> {
     try {
-      switch (tool.name) {
+      switch (name) {
         case "memory_store": {
-          const args = parsed.data as z.output<typeof StoreArgs>;
+          const args = data as z.output<typeof StoreArgs>;
           const stored = await memory.remember({
             namespace: args.scope === "global" ? GLOBAL_NAMESPACE : project,
             content: args.content,
@@ -120,7 +136,7 @@ export function createHarnessServer({ memory, projectId, harness, cwd }: Harness
         }
 
         case "memory_retrieve": {
-          const args = parsed.data as z.output<typeof RetrieveArgs>;
+          const args = data as z.output<typeof RetrieveArgs>;
           const { hits, fallback } = await memory.recall({
             namespaces,
             query: args.query,
@@ -136,13 +152,13 @@ export function createHarnessServer({ memory, projectId, harness, cwd }: Harness
         }
 
         case "memory_get": {
-          const { id } = parsed.data as z.output<typeof IdArgs>;
+          const { id } = data as z.output<typeof IdArgs>;
           const found = await memory.get(id, namespaces);
           return found ? text(formatMemory(found, projectId, true)) : failure(`Memory not found in this project: ${id}`);
         }
 
         case "memory_delete": {
-          const { id } = parsed.data as z.output<typeof IdArgs>;
+          const { id } = data as z.output<typeof IdArgs>;
           await memory.forget(id, namespaces);
           return text(`Deleted ${id}.`);
         }
@@ -156,11 +172,11 @@ export function createHarnessServer({ memory, projectId, harness, cwd }: Harness
       }
     } catch (error) {
       if (error instanceof MemStackError && error.code === "NOT_FOUND") {
-        return failure(`Memory not found in this project: ${(parsed.data as { id?: string }).id ?? ""}`);
+        return failure(`Memory not found in this project: ${(data as { id?: string }).id ?? ""}`);
       }
       return failure(error instanceof Error ? error.message : String(error));
     }
-  });
+  }
 
   return server;
 }
@@ -174,10 +190,12 @@ function formatMemory(m: Memory, projectId: string, detailed = false): string {
   return `${line}\nimportance: ${m.importance}\ntags: ${m.tags.join(", ") || "none"}\nproject: ${scope === "project" ? projectId : "all"}`;
 }
 
-function text(message: string) {
-  return { content: [{ type: "text" as const, text: message }] };
+type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
+
+function text(message: string): ToolResult {
+  return { content: [{ type: "text", text: message }] };
 }
 
-function failure(message: string) {
-  return { content: [{ type: "text" as const, text: message }], isError: true };
+function failure(message: string): ToolResult {
+  return { content: [{ type: "text", text: message }], isError: true };
 }
