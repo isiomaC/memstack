@@ -1,6 +1,6 @@
 # MemStack
 
-> The open-source memory layer for AI agents — store, retrieve, summarize, and prune.
+> Persistent memory for AI agents. Claude Code and Codex share one memory per project, and your own agents get the same pipeline: store, retrieve, summarize, and prune.
 
 [![npm version](https://img.shields.io/npm/v/@memstack/core)](https://www.npmjs.com/package/@memstack/core)
 [![skills.sh](https://skills.sh/b/isiomaC/memstack)](https://skills.sh/isiomaC/memstack)
@@ -9,6 +9,21 @@
 [![CI](https://github.com/isiomaC/memstack/actions/workflows/ci.yml/badge.svg)](https://github.com/isiomaC/memstack/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP Reference](https://img.shields.io/badge/MCP-LLM%20Reference-blue)](https://gitmcp.io/isiomaC/memstack)
+
+**Tell one agent how your project works. The other already knows.** Claude Code learns a convention; a new Codex session recalls it and gets the task right:
+
+[![Claude Code saves a project convention to MemStack; a new Codex session recalls it and writes pnpm install and fly deploy](assets/memstack-demo.gif)](#harness-memory-claude-code--codex)
+
+```bash
+npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0   # MemStack never installs storage drivers
+memstack init                  # LLM provider + store
+memstack connect claude-code
+memstack connect codex
+```
+
+Every session then starts with the project's key memories, and both agents save what you ask them to remember. [How harness memory works](#harness-memory-claude-code--codex).
+
+**Building your own agent?**
 
 ```bash
 # Use MemStack in your application
