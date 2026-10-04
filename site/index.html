@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MemStack · memory for coding agents</title>
+<meta name="description" content="Open-source memory that Claude Code, Codex and other MCP agents share. Install it, connect your agents, and what one learns the next recalls, per project, on a store you choose.">
+<meta name="theme-color" content="#f6f8fb">
+<link rel="canonical" href="https://memstack.stalewell.com/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta property="og:title" content="MemStack · memory for coding agents">
+<meta property="og:description" content="One memory per project, shared by Claude Code, Codex and any MCP client. Open source, on a store you choose.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://memstack.stalewell.com/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="wordmark" href="#top" aria-label="MemStack home">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="4" rx="1.5" fill="currentColor"/><rect x="2" y="8.5" width="16" height="4" rx="1.5" fill="currentColor" opacity=".6"/><rect x="2" y="14" width="16" height="3" rx="1.5" fill="oklch(58% 0.2 256)"/></svg>
+      MemStack
+    </a>
+    <nav aria-label="Primary">
+      <ul class="nav__links">
+        <li><a href="#install">Install</a></li>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#guides">Guides</a></li>
+        <li><a href="#agents">For agents</a></li>
+        <li><a href="#resources">Resources</a></li>
+      </ul>
+    </nav>
+    <div class="nav__right">
+      <button class="kbd-btn" type="button" data-open-palette aria-haspopup="dialog" aria-label="Open command palette"><span>Jump to</span><kbd>⌘K</kbd></button>
+      <a class="btn btn--primary" href="#install">Install</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- HERO -->
+<section class="hero" id="top">
+  <div class="wrap hero__grid">
+    <div class="hero__copy">
+      <p class="eyebrow">Open-source agent memory</p>
+      <h1>What one agent learns, the next one already knows.</h1>
+      <p class="lede">MemStack gives Claude Code, Codex and other MCP agents one shared memory per project. Tell one agent a decision; the other recalls it in the same repository, on a store you choose.</p>
+      <div class="hero__cta">
+        <a class="btn btn--primary" href="#install">Install in two minutes</a>
+        <a class="btn btn--ghost" href="https://github.com/isiomaC/memstack">View on GitHub</a>
+      </div>
+      <p class="mono-note">MIT licensed · Node 22+ · your keys, your database</p>
+    </div>
+
+    <figure class="code-card hero__card" aria-label="Install and connect commands, then a conversation across two agents">
+      <div class="code-card__bar">
+        <span class="code-card__name">~/my-project</span>
+        <span class="status">Example</span>
+      </div>
+<pre><code><span class="t-dim">$</span> npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0
+<span class="t-dim">$</span> memstack init
+<span class="t-dim">$</span> memstack connect claude-code codex
+<span class="t-dim">$</span> memstack doctor
+
+<span class="t-cmt"># later, in Claude Code</span>
+<span class="t-key">you</span>    <span class="t-user">Remember that this project uses Hono.</span>
+<span class="t-key">claude</span> <span class="t-str">Saved to project memory.</span>
+
+<span class="t-cmt"># next day, in Codex, same repository</span>
+<span class="t-key">you</span>    <span class="t-user">What framework does this project use?</span>
+<span class="t-key">codex</span>  <span class="t-str">Hono.</span><span class="caret"></span></code></pre>
+    </figure>
+  </div>
+</section>
+
+<!-- FACTS -->
+<section class="facts" aria-label="At a glance">
+  <div class="wrap facts__grid">
+    <div class="fact"><b>5</b><span>tools per agent in the harness profile</span></div>
+    <div class="fact"><b>1</b><span>command connects each agent</span></div>
+    <div class="fact"><b>5</b><span>stores: SQLite, Postgres, Redis, disk, markdown</span></div>
+    <div class="fact"><b>0</b><span>LLM calls to recall a memory</span></div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="sec" id="how">
+  <div class="wrap">
+    <div class="sec__head reveal">
+      <p class="eyebrow">How it works</p>
+      <h2>Four jobs, one memory per project.</h2>
+      <p>Coding agents forget everything between sessions and cannot see what each other learned. MemStack saves durable facts through MCP and loads the important ones when a session starts.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step reveal">
+        <span class="step__n"></span>
+        <div>
+          <h3>Save</h3>
+          <p>Say “remember that…”, or let the agent store a durable fact, decision or rule. MemStack asks your LLM for a few topic tags, so “uses Hono” is found later by “which framework?”. If tagging fails, the memory is still saved.</p>
+        </div>
+        <div class="code-card"><pre><code><span class="t-key">memory_store</span>({
+  content: <span class="t-str">"This project uses Hono for the API"</span>,
+  scope:   <span class="t-str">"project"</span>   <span class="t-cmt">// or "global"</span>
+})</code></pre></div>
+      </div>
+
+      <div class="step reveal">
+        <span class="step__n"></span>
+        <div>
+          <h3>Recall</h3>
+          <p>A session-start hook loads the project’s most important memories before the first prompt. During a session the agent asks plain questions. Recall is keyword ranking (BM25 with stemming) that runs locally, so it is fast and works offline.</p>
+        </div>
+        <div class="code-card"><pre><code><span class="t-key">memory_retrieve</span>({
+  query: <span class="t-str">"which framework do we use?"</span>
+})</code></pre></div>
+      </div>
+
+      <div class="step reveal">
+        <span class="step__n"></span>
+        <div>
+          <h3>Scope</h3>
+          <p>Memories belong to the repository. The project ID comes from the repo itself, so it survives clones, worktrees, renamed remotes and moved folders. Preferences that apply everywhere can be saved as global. One project cannot read or delete another’s memories.</p>
+        </div>
+        <div class="code-card"><pre><code><span class="t-dim">$</span> memstack project
+<span class="t-dim">$</span> memstack project pin my-app   <span class="t-cmt"># writes .memstack.json</span></code></pre></div>
+      </div>
+
+      <div class="step reveal">
+        <span class="step__n"></span>
+        <div>
+          <h3>Stay in control</h3>
+          <p>Agents get no bulk or destructive tools. Your LLM key lives in <code>~/.memstack/config.json</code>, readable only by you, never in agent configs. <code>connect</code> backs up every file it touches and <code>disconnect</code> restores each one exactly.</p>
+        </div>
+        <div class="code-card"><pre><code><span class="t-dim">$</span> memstack connect codex --dry-run
+<span class="t-dim">$</span> memstack disconnect codex</code></pre></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section class="sec sec--ruled" id="install">
+  <div class="wrap">
+    <div class="sec__head reveal">
+      <p class="eyebrow">Install</p>
+      <h2>Pick your agent, copy the commands.</h2>
+      <p>Claude Code and Codex have a one-command <code>connect</code>. Every other MCP client uses a short config block with the full 18-tool server.</p>
+    </div>
+
+    <div class="tabs" data-tabs>
+      <div class="tablist" role="tablist" aria-label="Agent">
+        <button class="tab" role="tab" id="t-cc" aria-controls="p-cc" aria-selected="true">Claude Code</button>
+        <button class="tab" role="tab" id="t-cx" aria-controls="p-cx" aria-selected="false" tabindex="-1">Codex</button>
+        <button class="tab" role="tab" id="t-oc" aria-controls="p-oc" aria-selected="false" tabindex="-1">opencode</button>
+        <button class="tab" role="tab" id="t-cu" aria-controls="p-cu" aria-selected="false" tabindex="-1">Cursor</button>
+        <button class="tab" role="tab" id="t-ge" aria-controls="p-ge" aria-selected="false" tabindex="-1">Gemini CLI</button>
+        <button class="tab" role="tab" id="t-mc" aria-controls="p-mc" aria-selected="false" tabindex="-1">Any MCP client</button>
+        <button class="tab" role="tab" id="t-lib" aria-controls="p-lib" aria-selected="false" tabindex="-1">Library</button>
+      </div>
+
+      <!-- Claude Code -->
+      <div class="panel is-on" role="tabpanel" id="p-cc" aria-labelledby="t-cc">
+        <div class="panel__copy">
+          <span class="pill-mono pill-mono--accent">One-command connect</span>
+          <h3>Claude Code</h3>
+          <ul>
+            <li>Adds a user-scope <code>memstack</code> MCP server and a <code>SessionStart</code> hook.</li>
+            <li>Installs the harness profile: project-scoped, shared with Codex.</li>
+            <li>Restart Claude Code afterwards, then run <code>/mcp</code> to check.</li>
+          </ul>
+        </div>
+        <div class="stack">
+          <div class="code-card">
+            <div class="code-card__bar"><span class="code-card__name">terminal</span><button class="copy" type="button" data-copy>Copy</button></div>
+<pre><code>npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0
+memstack init
+memstack connect claude-code
+memstack doctor</code></pre>
+          </div>
+          <p class="mono-note">MemStack never installs storage drivers for you. <code>better-sqlite3</code> is the SQLite driver; pick another store in <code>memstack init</code>.</p>
+        </div>
+      </div>
+
+      <!-- Codex -->
+      <div class="panel" role="tabpanel" id="p-cx" aria-labelledby="t-cx" hidden>
+        <div class="panel__copy">
+          <span class="pill-mono pill-mono--accent">One-command connect</span>
+          <h3>Codex</h3>
+          <ul>
+            <li>Registers the server with <code>codex mcp add</code> and a <code>SessionStart</code> hook in <code>hooks.json</code>.</li>
+            <li>Adds a short marked block to <code>~/.codex/AGENTS.md</code>, because Codex gives MCP instructions little weight.</li>
+            <li>Start a new session, then approve the hook once with <code>/hooks</code>.</li>
+          </ul>
+        </div>
+        <div class="stack">
+          <div class="code-card">
+            <div class="code-card__bar"><span class="code-card__name">terminal</span><button class="copy" type="button" data-copy>Copy</button></div>
+<pre><code>npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0
+memstack init
+memstack connect codex
+memstack doctor</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- opencode -->
+      <div class="panel" role="tabpanel" id="p-oc" aria-labelledby="t-oc" hidden>
+        <div class="panel__copy">
+          <span class="pill-mono">Manual config · full profile</span>
+          <h3>opencode</h3>
+          <ul>
+            <li>Put this in <code>opencode.json</code> in the project root, or <code>~/.config/opencode/opencode.json</code>.</li>
+            <li><code>command</code> is one array, and variables go under <code>environment</code>.</li>
+            <li>Check with <code>opencode mcp list</code>. There is no <code>memstack connect opencode</code> yet.</li>
+          </ul>
+        </div>
+        <div class="stack">
+          <div class="code-card">
+            <div class="code-card__bar"><span class="code-card__name">opencode.json</span><button class="copy" type="button" data-copy>Copy</button></div>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "memstack": {
+      "type": "local",
+      "command": ["npx", "-y", "-p", "@memstack/mcp",
+                  "-p", "better-sqlite3@^11.10.0", "memstack-mcp"],
+      "enabled": true,
+      "environment": {
+        "MEMSTACK_STORAGE": "sqlite",
+        "SQLITE_PATH": "/Users/me/.memstack/memstack.db",
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cursor -->
+      <div class="panel" role="tabpanel" id="p-cu" aria-labelledby="t-cu" hidden>
+        <div class="panel__copy">
+          <span class="pill-mono">Manual config · full profile</span>
+          <h3>Cursor</h3>
+          <ul>
+            <li>Use <code>~/.cursor/mcp.json</code> for every project, or <code>.cursor/mcp.json</code> for one.</li>
+            <li>Cursor Settings → MCP should show the server with an active dot and its tools.</li>
+          </ul>
+        </div>
+        <div class="stack">
+          <div class="code-card">
+            <div class="code-card__bar"><span class="code-card__name">.cursor/mcp.json</span><button class="copy" type="button" data-copy>Copy</button></div>
+<pre><code>{
+  "mcpServers": {
+    "memstack": {
+      "command": "npx",
+      "args": ["-y", "-p", "@memstack/mcp",
+               "-p", "better-sqlite3@^11.10.0", "memstack-mcp"],
+      "env": {
+        "MEMSTACK_STORAGE": "sqlite",
+        "SQLITE_PATH": "/Users/me/.memstack/memstack.db",
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gemini -->
+      <div class="panel" role="tabpanel" id="p-ge" aria-labelledby="t-ge" hidden>
+        <div class="panel__copy">
+          <span class="pill-mono">Manual config · full profile</span>
+          <h3>Gemini CLI</h3>
+          <ul>
+            <li>Add it to <code>.gemini/settings.json</code> in the project, or <code>~/.gemini/settings.json</code> for every project.</li>
+          </ul>
+        </div>
+        <div class="stack">
+          <div class="code-card">
+            <div class="code-card__bar"><span class="code-card__name">.gemini/settings.json</span><button class="copy" type="button" data-copy>Copy</button></div>
+<pre><code>{
+  "mcpServers": {
+    "memstack": {
+      "command": "npx",
+      "args": ["-y", "-p", "@memstack/mcp",
+               "-p", "better-sqlite3@^11.10.0", "memstack-mcp"],
+      "env": {
+        "MEMSTACK_STORAGE": "sqlite",
+        "SQLITE_PATH": "/Users/me/.memstack/memstack.db",
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Any MCP -->
+      <div class="panel" role="tabpanel" id="p-mc" aria-labelledby="t-mc" hidden>
+        <div class="panel__copy">
+          <span class="pill-mono">Manual config · full profile</span>
+          <h3>Any MCP client</h3>
+          <ul>
+            <li>Most clients wrap the same <code>command</code>, <code>args</code> and <code>env</code>. Some use another top-level key: <code>mcpServers</code>, <code>mcp</code>, <code>context_servers</code> or <code>servers</code>.</li>
+            <li>Test the server on its own first with the MCP Inspector.</li>
+            <li>The default profile needs an <code>OPENAI_API_KEY</code> or <code>ANTHROPIC_API_KEY</code>. With <code>MEMSTACK_STORAGE=memory</code> nothing survives a restart.</li>
+          </ul>
+        </div>
+        <div class="stack">
+          <div class="code-card">
+            <div class="code-card__bar"><span class="code-card__name">terminal</span><button class="copy" type="button" data-copy>Copy</button></div>
+<pre><code>npx -y @modelcontextprotocol/inspector npx -y @memstack/mcp</code></pre>
+          </div>
+          <div class="code-card">
+            <div class="code-card__bar"><span class="code-card__name">mcp.json</span><button class="copy" type="button" data-copy>Copy</button></div>
+<pre><code>{
+  "mcpServers": {
+    "memstack": {
+      "command": "npx",
+      "args": ["-y", "@memstack/mcp"],
+      "env": {
+        "MEMSTACK_STORAGE": "memory",
+        "OPENAI_API_KEY": "sk-...",
+        "MEMSTACK_ACTOR": "my-agent"
+      }
+    }
+  }
+}</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Library -->
+      <div class="panel" role="tabpanel" id="p-lib" aria-labelledby="t-lib" hidden>
+        <div class="panel__copy">
+          <span class="pill-mono">TypeScript SDK</span>
+          <h3>As a library</h3>
+          <ul>
+            <li>For an application that owns its own memory: store, retrieve, compile context, summarize and prune.</li>
+            <li>Works with OpenAI, DeepSeek, OpenRouter, Together, Gemini or any OpenAI-compatible API. Omit the embedding adapter and retrieval falls back to keyword, recency and importance.</li>
+          </ul>
+        </div>
+        <div class="stack">
+          <div class="code-card">
+            <div class="code-card__bar"><span class="code-card__name">memory.ts</span><button class="copy" type="button" data-copy>Copy</button></div>
+<pre><code>import { MemStack, OpenAILLMAdapter, InMemoryStorageAdapter } from "@memstack/core";
+
+const memstack = new MemStack({
+  llm: new OpenAILLMAdapter({ apiKey: process.env.OPENAI_API_KEY! }),
+  storage: new InMemoryStorageAdapter(),
+});
+
+await memstack.memory.store({
+  actorId: "support-bot-42",
+  content: "User reports login failing with error 503 on Chrome 125.",
+  tags: ["login", "bug"],
+  importance: 0.8,
+});
+
+const ctx = await memstack.memory.compileContext({
+  actorId: "support-bot-42",
+  maxTokens: 2000,
+});</code></pre>
+          </div>
+          <p class="mono-note"><code>npm install @memstack/core</code></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STORAGE + COMMANDS (dark band) -->
+<section class="band" id="reference">
+  <div class="wrap band-grid">
+    <div class="reveal">
+      <p class="eyebrow">Reference</p>
+      <h2>Seven commands. Five stores.</h2>
+      <p>Run <code class="on-dark">memstack doctor</code> first when something looks wrong. It checks the config file, the LLM key, the storage driver, each agent’s registration, hook and guidance, and starts the server to confirm it answers.</p>
+      <p>Storage drivers are yours to install. MemStack never bundles or auto-installs them, so choose SQLite for one local file, or Postgres to share across machines.</p>
+    </div>
+    <div class="reveal">
+      <div class="table-scroll">
+        <table class="cmds">
+          <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>memstack init</code></td><td>Choose an LLM provider and a store. Verifies the key with a real request.</td></tr>
+            <tr><td><code>memstack connect &lt;agent&gt;</code></td><td>Registers MemStack with Claude Code or Codex. Checks the server first and undoes everything if a step fails.</td></tr>
+            <tr><td><code>memstack disconnect &lt;agent&gt;</code></td><td>Removes what <code>connect</code> added. Your memories are kept.</td></tr>
+            <tr><td><code>memstack status</code></td><td>Config, storage, the current project and what each agent has connected.</td></tr>
+            <tr><td><code>memstack doctor</code></td><td>Diagnoses setup problems and prints the fix. <code>--live</code> also tests the LLM key.</td></tr>
+            <tr><td><code>memstack memories [query]</code></td><td>List or search this project’s memories. <code>--delete &lt;id&gt;</code> removes one.</td></tr>
+            <tr><td><code>memstack project</code></td><td>Show the project ID. <code>pin</code> fixes it in <code>.memstack.json</code>; <code>merge</code> moves memories from an old ID.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-scroll table-scroll--gap">
+        <table class="cmds">
+          <thead><tr><th scope="col">Store</th><th scope="col">Driver to install</th><th scope="col">Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>sqlite</code></td><td><code>better-sqlite3@^11.10.0</code></td><td>Default. One local file, safe for both agents at once.</td></tr>
+            <tr><td><code>postgres</code></td><td><code>postgres@^3.4.9</code></td><td>Shared across machines.</td></tr>
+            <tr><td><code>redis</code></td><td><code>ioredis@^5.11.1</code></td><td></td></tr>
+            <tr><td><code>disk</code>, <code>markdown</code></td><td>none</td><td>Single process only.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- GUIDES -->
+<section class="sec" id="guides">
+  <div class="wrap">
+    <div class="sec__head reveal">
+      <p class="eyebrow">Guides</p>
+      <h2>Where to go after it works.</h2>
+      <p>The full documentation lives in the repository. These are the pages people reach for first.</p>
+    </div>
+    <div class="ledger reveal">
+      <a href="https://github.com/isiomaC/memstack#harness-memory-claude-code--codex"><span class="tag">Start</span><span class="ttl">Harness memory for Claude Code and Codex</span><span class="desc">How saving, recall, scope and safety work, and what <code>connect</code> changes on disk.</span><span class="arrow" aria-hidden="true">→</span></a>
+      <a href="https://github.com/isiomaC/memstack/blob/main/docs/MCP_SETUP.md"><span class="tag">Setup</span><span class="ttl">MCP setup for every client</span><span class="desc">Copy-paste config for Claude Desktop, Cursor, Windsurf, Cline, Continue, VS Code, Zed, opencode, Gemini CLI and Goose.</span><span class="arrow" aria-hidden="true">→</span></a>
+      <a href="https://github.com/isiomaC/memstack#projects"><span class="tag">Concept</span><span class="ttl">How a project is identified</span><span class="desc">Pinned ID, first commit, origin remote. Why forks share memory until you pin one.</span><span class="arrow" aria-hidden="true">→</span></a>
+      <a href="https://github.com/isiomaC/memstack#storage"><span class="tag">Config</span><span class="ttl">Choosing and switching storage</span><span class="desc">Drivers, trade-offs, and moving memories with <code>export</code> and <code>import</code>.</span><span class="arrow" aria-hidden="true">→</span></a>
+      <a href="https://github.com/isiomaC/memstack#troubleshooting"><span class="tag">Fix</span><span class="ttl">Troubleshooting</span><span class="desc">Missing driver, Codex not loading memories at start, memories that seem to be missing.</span><span class="arrow" aria-hidden="true">→</span></a>
+      <a href="https://github.com/isiomaC/memstack#the-memory-pipeline"><span class="tag">SDK</span><span class="ttl">The memory pipeline</span><span class="desc">Store, retrieve, compile context, summarize and prune, with token budgets.</span><span class="arrow" aria-hidden="true">→</span></a>
+      <a href="https://github.com/isiomaC/memstack/blob/main/packages/mcp/README.md"><span class="tag">Reference</span><span class="ttl">MCP server reference</span><span class="desc">Every tool, resource and prompt, plus the stdio and Streamable HTTP transports.</span><span class="arrow" aria-hidden="true">→</span></a>
+    </div>
+  </div>
+</section>
+
+<!-- FOR AGENTS -->
+<section class="sec sec--tint" id="agents">
+  <div class="wrap">
+    <div class="sec__head reveal">
+      <p class="eyebrow">For agents</p>
+      <h2>Let the agent set itself up.</h2>
+      <p>Paste the prompt, or give your agent the skill. It runs the same commands a person would, and stops where a decision is yours.</p>
+    </div>
+    <div class="agents">
+      <div class="stack reveal">
+        <div class="code-card">
+          <div class="code-card__bar"><span class="code-card__name">prompt</span><button class="copy" type="button" data-copy>Copy</button></div>
+<pre><code>Set up MemStack so you and my other coding agents share one
+memory per project. Run `memstack status` first. If this agent
+is not connected, tell me to run:
+
+  npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0
+  memstack init
+  memstack connect &lt;claude-code|codex&gt;
+
+Never install storage drivers yourself, and never store
+secrets. When I say "remember ...", call memory_store. At the
+start of a task, call memory_retrieve.</code></pre>
+        </div>
+        <div class="code-card">
+          <div class="code-card__bar"><span class="code-card__name">agent skill</span><button class="copy" type="button" data-copy>Copy</button></div>
+<pre><code>npx skills add isiomaC/memstack -g</code></pre>
+        </div>
+      </div>
+      <div class="agents__list reveal">
+        <div>
+          <h3>The skill</h3>
+          <p>The <code>memstack-cli</code> skill teaches compatible agents to check <code>memstack status</code>, use the project-scoped tools inside Claude Code and Codex, and fall back to the shell only when they must. Omit <code>-g</code> to install it for one project.</p>
+        </div>
+        <div>
+          <h3>Machine-readable docs</h3>
+          <p><a class="link" href="llms.txt">llms.txt</a> on this site summarises MemStack for models. GitMCP serves the repository as an MCP docs endpoint at <code>gitmcp.io/isiomaC/memstack</code>.</p>
+        </div>
+        <div>
+          <h3>Rules agents follow</h3>
+          <p>Store one self-contained statement per memory. Recall before decisions that depend on history. Never store secrets, credentials or personal data. Cite memory IDs when relying on them.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RESOURCES -->
+<section class="sec" id="resources">
+  <div class="wrap">
+    <div class="sec__head reveal">
+      <p class="eyebrow">Resources</p>
+      <h2>Everywhere MemStack is published.</h2>
+      <p>Four npm packages, a container image, two directory listings and an agent skill.</p>
+    </div>
+    <div class="res reveal">
+      <a class="r-4" href="https://www.npmjs.com/package/@memstack/cli"><span class="rk">npm</span><span class="rtl">@memstack/cli</span><span class="rd">Shell tool. <code>init</code>, <code>connect</code>, <code>doctor</code> and the rest.</span><span class="rc">npm install -g @memstack/cli</span></a>
+      <a class="r-4" href="https://www.npmjs.com/package/@memstack/mcp"><span class="rk">npm</span><span class="rtl">@memstack/mcp</span><span class="rd">The MCP server. Add <code>--profile harness</code> for coding agents.</span><span class="rc">npx -y @memstack/mcp</span></a>
+      <a class="r-4" href="https://www.npmjs.com/package/@memstack/core"><span class="rk">npm</span><span class="rtl">@memstack/core</span><span class="rd">The runtime SDK for applications that own their memory.</span><span class="rc">npm install @memstack/core</span></a>
+      <a class="r-4" href="https://www.npmjs.com/package/@memstack/server"><span class="rk">npm</span><span class="rtl">@memstack/server</span><span class="rd">A shared HTTP API for several applications.</span><span class="rc">npx @memstack/server</span></a>
+      <a class="r-4" href="https://github.com/isiomaC/memstack/pkgs/container/memstack-server"><span class="rk">Container</span><span class="rtl">memstack-server image</span><span class="rd">The REST API without installing Node. Not an MCP image.</span><span class="rc">ghcr.io/isiomac/memstack-server</span></a>
+      <a class="r-4" href="https://github.com/isiomaC/memstack"><span class="rk">Source</span><span class="rtl">GitHub repository</span><span class="rd">Code, issues, changelog, contributing and security policy.</span><span class="rc">github.com/isiomaC/memstack</span></a>
+      <a class="r-6" href="https://registry.modelcontextprotocol.io/?q=io.github.isiomaC%2Fmemstack"><span class="rk">Directory</span><span class="rtl">MCP Registry</span><span class="rd">The official MCP Registry entry for <code>@memstack/mcp</code>.</span><span class="rc">io.github.isiomaC/memstack</span></a>
+      <a class="r-6" href="https://glama.ai/mcp/servers/isiomaC/memstack"><span class="rk">Directory</span><span class="rtl">Glama</span><span class="rd">A hosted listing with an inspector and a quality score.</span><span class="rc">glama.ai/mcp/servers/isiomaC/memstack</span></a>
+      <a class="r-6" href="https://skills.sh/isiomaC/memstack"><span class="rk">Agent skill</span><span class="rtl">skills.sh</span><span class="rd">The <code>memstack-cli</code> skill for Claude Code, Codex and other agents.</span><span class="rc">npx skills add isiomaC/memstack -g</span></a>
+      <a class="r-6" href="https://gitmcp.io/isiomaC/memstack"><span class="rk">LLM docs</span><span class="rtl">GitMCP</span><span class="rd">Point an agent at the repository as a documentation MCP endpoint.</span><span class="rc">gitmcp.io/isiomaC/memstack</span></a>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="sec sec--ruled" id="faq">
+  <div class="wrap faq-grid">
+    <div class="reveal">
+      <p class="eyebrow">Straight answers</p>
+      <h2>What leaves your machine, and what doesn’t.</h2>
+      <p>Short answers to the questions that decide whether you can use it.</p>
+    </div>
+    <div class="faq reveal">
+      <details>
+        <summary>Where is my memory stored?</summary>
+        <div class="ans"><p>In the store you pick in <code>memstack init</code>: a local SQLite file by default, or Postgres, Redis, disk or markdown. MemStack has no hosted service. The only data that reaches a third party is what your own LLM provider receives for tagging and summarising.</p></div>
+      </details>
+      <details>
+        <summary>Does recalling a memory call an LLM?</summary>
+        <div class="ans"><p>No. Recall is local keyword ranking, so it is fast and works offline. Saving a memory asks your LLM for a few topic tags, and the memory is still saved if that fails.</p></div>
+      </details>
+      <details>
+        <summary>Can an agent store my secrets?</summary>
+        <div class="ans"><p>Agents are told never to store secrets, credentials or personal data, but MemStack does not scan memories for them. Treat the store as you would any file holding project notes, and delete a bad memory with <code>memstack memories --delete &lt;id&gt;</code>.</p></div>
+      </details>
+      <details>
+        <summary>Why do two forks share memories?</summary>
+        <div class="ans"><p>The project ID comes from the repository’s first commit, which a fork shares with its origin. On one store, run <code>memstack project pin &lt;id&gt;</code> in one of them to separate them.</p></div>
+      </details>
+      <details>
+        <summary>Which agents work today?</summary>
+        <div class="ans"><p>Claude Code and Codex have the harness profile, project scoping and session-start recall through <code>memstack connect</code>. Any other MCP client works with the manual config and the full 18-tool server. The harness profile speaks stdio only.</p></div>
+      </details>
+      <details>
+        <summary>Is it only an MCP server?</summary>
+        <div class="ans"><p>No. It is also a TypeScript SDK (<code>@memstack/core</code>), a CLI, and a REST server for sharing memory between applications.</p></div>
+      </details>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot__in">
+    <span>© 2026 Stalewell · MemStack is MIT licensed</span>
+    <span><a href="https://github.com/isiomaC/memstack">GitHub</a> · <a href="https://github.com/isiomaC/memstack/blob/main/CHANGELOG.md">Changelog</a> · <a href="https://github.com/isiomaC/memstack/blob/main/SECURITY.md">Security</a> · <a href="llms.txt">llms.txt</a></span>
+  </div>
+</footer>
+
+<!-- command palette -->
+<div class="pal" id="pal" role="dialog" aria-modal="true" aria-label="Jump to" hidden>
+  <div class="pal__box">
+    <input class="pal__in" id="pal-in" type="text" placeholder="Jump to…" aria-label="Search sections and links" autocomplete="off" spellcheck="false">
+    <ul class="pal__list" id="pal-list" role="listbox"></ul>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

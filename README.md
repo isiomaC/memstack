@@ -2,6 +2,8 @@
 
 > Persistent memory for AI agents. Claude Code and Codex share one memory per project, and your own agents get the same pipeline: store, retrieve, summarize, and prune.
 
+**Website and install guides: [memstack.stalewell.com](https://memstack.stalewell.com/)**
+
 [![npm version](https://img.shields.io/npm/v/@memstack/core)](https://www.npmjs.com/package/@memstack/core)
 [![skills.sh](https://skills.sh/b/isiomaC/memstack)](https://skills.sh/isiomaC/memstack)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-%40memstack%2Fmcp-blueviolet)](https://registry.modelcontextprotocol.io/?q=io.github.isiomaC%2Fmemstack)
