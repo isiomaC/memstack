@@ -21,10 +21,10 @@
 <meta name="twitter:title" content="MemStack · memory for coding agents">
 <meta name="twitter:description" content="One memory per project, shared by Claude Code, Codex and any MCP client. Open source, on a store you choose.">
 <meta name="twitter:image" content="https://memstack.stalewell.com/og.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preload" href="fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/space-grotesk.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"MemStack","description":"Open-source memory that Claude Code, Codex and other MCP agents share, per project, on a store you choose.","applicationCategory":"DeveloperApplication","operatingSystem":"Any","license":"https://opensource.org/licenses/MIT","url":"https://memstack.stalewell.com/","codeRepository":"https://github.com/isiomaC/memstack","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@type":"Organization","name":"Stalewell","url":"https://stalewell.com"}}</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -58,7 +58,7 @@
   <div class="wrap hero__grid">
     <div class="hero__copy">
       <p class="eyebrow">Open-source agent memory</p>
-      <h1>What one agent learns, the next one already knows.</h1>
+      <h1>What one agent learns, <span class="grad">the next one already knows.</span></h1>
       <p class="lede">MemStack gives Claude Code, Codex and other MCP agents one shared memory per project. Tell one agent a decision; the other recalls it in the same repository, on a store you choose.</p>
       <div class="hero__cta">
         <a class="btn btn--primary" href="#install">Install in two minutes</a>
@@ -557,10 +557,16 @@ start of a task, call memory_retrieve.</code></pre>
 </main>
 
 <footer class="foot">
-  <div class="wrap foot__in">
-    <span>© 2026 Stalewell · MemStack is MIT licensed</span>
-    <span><a href="https://github.com/isiomaC/memstack">GitHub</a> · <a href="https://github.com/isiomaC/memstack/blob/main/CHANGELOG.md">Changelog</a> · <a href="https://github.com/isiomaC/memstack/blob/main/SECURITY.md">Security</a> · <a href="llms.txt">llms.txt</a></span>
+  <div class="wrap foot__top">
+    <div class="foot__brand">
+      <a class="wordmark" href="#top" aria-label="MemStack home"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="4" rx="1.5" fill="currentColor"/><rect x="2" y="8.5" width="16" height="4" rx="1.5" fill="currentColor" opacity=".6"/><rect x="2" y="14" width="16" height="3" rx="1.5" fill="oklch(58% 0.2 256)"/></svg>MemStack</a>
+      <p>Open-source memory that Claude Code, Codex and other MCP agents share, per project, on a store you choose.</p>
+    </div>
+    <nav class="foot__col" aria-label="Product"><h2>Product</h2><a href="#install">Install</a><a href="#how">How it works</a><a href="#agents">For agents</a><a href="#faq">FAQ</a></nav>
+    <nav class="foot__col" aria-label="Resources"><h2>Resources</h2><a href="https://github.com/isiomaC/memstack">GitHub</a><a href="https://github.com/isiomaC/memstack/blob/main/CHANGELOG.md">Changelog</a><a href="https://www.npmjs.com/package/@memstack/cli">npm</a><a href="llms.txt">llms.txt</a></nav>
+    <nav class="foot__col" aria-label="Support and legal"><h2>Support</h2><a href="https://github.com/isiomaC/memstack/issues">Get help</a><a href="https://github.com/isiomaC/memstack/blob/main/SECURITY.md">Security</a><a href="privacy.html">Privacy</a><a href="https://github.com/isiomaC/memstack/blob/main/LICENSE">MIT license</a></nav>
   </div>
+  <div class="wrap foot__in"><span>© 2026 Stalewell · MemStack is MIT licensed</span><span>No cookies. No trackers.</span></div>
 </footer>
 
 <!-- command palette -->
