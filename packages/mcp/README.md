@@ -215,6 +215,8 @@ memstack-mcp --http --port 3939
 # MCP endpoint: http://localhost:3939/mcp
 ```
 
+HTTP mode binds to `127.0.0.1` by default, so only this machine can connect, and it has **no authentication**. `--host <address>` changes the bind address (for example `--host 0.0.0.0` inside a container); a non-loopback address prints a warning, because anyone who can reach the port can read and write memory. Put it behind a proxy that authenticates before exposing it. The harness profile (`--profile harness`) is stdio only.
+
 HTTP mode is stateless (`sessionIdGenerator: undefined` per the MCP spec) — each request gets a fresh protocol handshake, but all requests share one underlying MemStack instance, so storage connections aren't reopened per call. Point any Streamable-HTTP-capable MCP client at `http://host:3939/mcp`.
 
 ## Actor persistence

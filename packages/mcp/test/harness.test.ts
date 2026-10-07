@@ -45,6 +45,18 @@ describe("harness MCP profile", () => {
     for (const tool of tools) expect(JSON.stringify(tool.inputSchema)).not.toContain("actorId");
   });
 
+  it("refuses to store a secret, says why without echoing it, and stores nothing", async () => {
+    const secret = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8";
+    const { call } = await connect(storage, "p1");
+
+    const result = await call("memory_store", { content: `Deploy with ${secret}` });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("github-token");
+    expect(textOf(result)).not.toContain(secret);
+    expect(textOf(await call("memory_retrieve", {}))).toContain("No memories yet");
+  });
+
   it("sends server instructions whose first 512 characters stand alone", async () => {
     const { client } = await connect(storage, "p1");
     expect(client.getInstructions()).toBe(HARNESS_INSTRUCTIONS);

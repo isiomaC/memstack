@@ -2,7 +2,7 @@
 import { parseArgs } from "node:util";
 import { createServer as createHttpServer } from "node:http";
 import { HarnessMemory, InMemoryStorageAdapter, MemStack } from "@memstack/core";
-import type { MemStackConfig } from "@memstack/core";
+import type { MemStackConfig, SecretPolicy } from "@memstack/core";
 import { resolveProject } from "@memstack/config-env";
 import { loadConfig, loadHarnessConfig } from "./config.js";
 import { createServer } from "./server.js";
@@ -27,6 +27,7 @@ async function main() {
     options: {
       http: { type: "boolean", default: false },
       port: { type: "string", default: "3939" },
+      host: { type: "string", default: "127.0.0.1" },
       profile: { type: "string", default: "default" },
       harness: { type: "string" },
     },
@@ -42,7 +43,7 @@ async function main() {
   const { config, defaultActorId } = await loadConfig();
 
   if (values.http) {
-    await runHttp({ config, defaultActorId, port: Number(values.port) });
+    await runHttp({ config, defaultActorId, port: Number(values.port), host: values.host });
     return;
   }
 
@@ -70,6 +71,7 @@ async function runHarness(harness: string | undefined) {
   const memory = new HarnessMemory({
     storage,
     llm: config.llm,
+    secretPolicy: secretPolicyFromEnv(),
     onError: (error, context) => console.error(`memstack-mcp: ${context}: ${error.message}`),
   });
   const adopted = await memory.adoptProjects(project.previousIds, project.id);
@@ -118,7 +120,7 @@ function exitWhenStdinCloses(transport: StdioServerTransport, close: () => Promi
  * connections aren't re-opened per request) but a fresh MCP protocol Server +
  * transport per request, since a Server only supports one active transport.
  */
-async function runHttp({ config, defaultActorId, port }: { config: MemStackConfig; defaultActorId: string; port: number }) {
+async function runHttp({ config, defaultActorId, port, host }: { config: MemStackConfig; defaultActorId: string; port: number; host: string }) {
   const ms = new MemStack(config);
 
   const httpServer = createHttpServer(async (req, res) => {
@@ -160,9 +162,24 @@ async function runHttp({ config, defaultActorId, port }: { config: MemStackConfi
     }
   });
 
-  httpServer.listen(port, () => {
-    console.error(`memstack-mcp listening on http://localhost:${port}/mcp (Streamable HTTP, stateless)`);
+  httpServer.listen(port, host, () => {
+    console.error(`memstack-mcp listening on http://${host.includes(":") ? `[${host}]` : host}:${port}/mcp (Streamable HTTP, stateless)`);
+    if (!isLoopback(host)) {
+      console.error(`memstack-mcp: warning: ${host} is reachable from other machines and this server has no authentication. Anyone who can connect can read and write memory. Put it behind a proxy that authenticates, or use 127.0.0.1.`);
+    }
   });
+}
+
+/** MEMSTACK_SECRET_POLICY: reject (default), redact, or off. Anything else is a startup error. */
+function secretPolicyFromEnv(): SecretPolicy | undefined {
+  const value = process.env.MEMSTACK_SECRET_POLICY?.trim().toLowerCase();
+  if (!value) return undefined;
+  if (value === "reject" || value === "redact" || value === "off") return value;
+  throw new Error(`MEMSTACK_SECRET_POLICY must be "reject", "redact", or "off", not "${value}"`);
+}
+
+function isLoopback(host: string): boolean {
+  return host === "localhost" || host === "::1" || host.startsWith("127.");
 }
 
 main().catch((err) => {

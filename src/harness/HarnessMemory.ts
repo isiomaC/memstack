@@ -5,6 +5,8 @@ import type { RecallResult } from "../retrieval/LexicalRetriever.js";
 import { ENRICHMENT_MAX_TOKENS, parseTags } from "../enrichment.js";
 import { MemStackError, notFound, validationError } from "../errors.js";
 import { projectNamespace } from "./namespaces.js";
+import { filterSecrets } from "../security/secrets.js";
+import type { SecretPolicy } from "../security/secrets.js";
 
 export interface HarnessMemoryConfig {
   storage: StorageProvider;
@@ -15,6 +17,14 @@ export interface HarnessMemoryConfig {
   tagTimeoutMs?: number;
   /** Longest content accepted by `remember`. Default 8000 characters. */
   maxContentChars?: number;
+  /**
+   * What to do with a memory that contains a credential. `reject` (default)
+   * refuses it with an error naming the kind of secret; `redact` stores it with
+   * the secret replaced by `[REDACTED:<kind>]`; `off` stores it unchanged.
+   * The check runs before the LLM is asked for tags, so a secret never reaches
+   * the provider.
+   */
+  secretPolicy?: SecretPolicy;
   /** Memories ranked per namespace on recall. Default 2000. */
   candidateLimit?: number;
   /** Called when tagging fails; the memory is still stored. */
@@ -61,6 +71,7 @@ export class HarnessMemory {
   private autoTags: boolean;
   private tagTimeoutMs: number;
   private maxContentChars: number;
+  private secretPolicy: SecretPolicy;
   private onError?: (error: Error, context: string) => void;
   private initialized?: Promise<void>;
 
@@ -71,6 +82,7 @@ export class HarnessMemory {
     this.autoTags = config.autoTags ?? true;
     this.tagTimeoutMs = config.tagTimeoutMs ?? 10_000;
     this.maxContentChars = config.maxContentChars ?? 8000;
+    this.secretPolicy = config.secretPolicy ?? "reject";
     this.onError = config.onError;
   }
 
@@ -87,17 +99,19 @@ export class HarnessMemory {
       throw validationError("Importance must be between 0 and 1", { importance: input.importance });
     }
 
+    const safe = this.screen(content, input.tags ?? []);
+
     await this.ensureInit();
-    const llmTags = this.autoTags ? await this.suggestTags(content) : [];
-    const tags = [...new Set([...(input.tags ?? []), ...llmTags].map((t) => t.toLowerCase().trim()).filter(Boolean))];
+    const llmTags = this.autoTags ? await this.suggestTags(safe.content) : [];
+    const tags = [...new Set([...safe.tags, ...llmTags].map((t) => t.toLowerCase().trim()).filter(Boolean))];
 
     return this.storage.store({
       actorId: input.namespace,
-      content,
+      content: safe.content,
       memoryType: input.kind ?? "observation",
       importance: input.importance ?? 0.5,
       tags: tags.slice(0, MAX_TAGS),
-      metadata: { source: input.source },
+      metadata: { source: input.source, ...(safe.redacted.length > 0 ? { redacted: safe.redacted } : {}) },
     });
   }
 
@@ -193,6 +207,21 @@ export class HarnessMemory {
       moved += await this.moveNamespace(from, target);
     }
     return moved;
+  }
+
+  /** Apply the secret policy to the content and tags, before anything leaves the process. */
+  private screen(content: string, tags: string[]): { content: string; tags: string[]; redacted: string[] } {
+    const body = filterSecrets(content, this.secretPolicy);
+    const screened = tags.map((tag) => filterSecrets(tag, this.secretPolicy));
+    const kinds = [...new Set([...body.kinds, ...screened.flatMap((t) => t.kinds)])];
+    if (kinds.length > 0 && this.secretPolicy === "reject") {
+      throw validationError(
+        `This memory looks like it contains a secret (${kinds.join(", ")}), so it was not stored. ` +
+          "Store the fact without the credential, for example name the variable that holds it.",
+        { kinds },
+      );
+    }
+    return { content: body.text, tags: screened.map((t) => t.text), redacted: kinds };
   }
 
   private ensureInit(): Promise<void> {

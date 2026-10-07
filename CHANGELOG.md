@@ -2,7 +2,27 @@
 
 ## Unreleased
 
+### @memstack/core
+
+- Secret filter. `HarnessMemory.remember` now refuses a memory that contains a
+  credential (private keys, AWS, GitHub, Slack, Stripe, Anthropic, OpenAI,
+  Google and npm tokens, JWTs, bearer tokens, passwords in connection strings,
+  and `password = "..."` style assignments) and names the kind without
+  repeating the value. It runs before the LLM is asked for tags, so a secret
+  never reaches the provider, and it also checks tags. The new `secretPolicy`
+  option takes `reject` (default), `redact`, or `off`. `scanSecrets`,
+  `redactSecrets` and `filterSecrets` are exported. The check is pattern-based
+  and will miss formats it doesn't know.
+
 ### @memstack/mcp
+
+- `memstack-mcp --http` now listens on `127.0.0.1` instead of every network
+  interface. It has no authentication, so `--host <address>` is needed to
+  expose it, and a non-loopback address prints a warning. The startup message
+  now shows the real address.
+- `MEMSTACK_SECRET_POLICY` (`reject`, `redact`, `off`) sets the harness
+  profile's secret policy; the default `reject` makes `memory_store` fail with
+  a message for a memory that contains a credential.
 
 - The harness tools ignore unknown arguments instead of failing the call, and
   their reply names what was ignored. Models sometimes add fields such as

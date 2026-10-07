@@ -84,7 +84,7 @@ Nearly every MCP client uses some variant of this JSON shape for a local (stdio)
 
 If your client isn't in the list below: look for its MCP docs, find where it wants `command`/`args`/`env` (sometimes under a different top-level key — `mcpServers`, `mcp`, `context_servers`, `servers`), and drop in the block above. The `command`/`args` pair is always equivalent to running `npx -y @memstack/mcp` in a terminal with those env vars set.
 
-**Running one shared server instead of one-per-client:** every config above spawns `memstack-mcp` as a local subprocess per client (stdio transport) — fine for one agent per machine, but each client gets its own process and, if using disk/markdown storage, its own file lock. For multiple agents/processes sharing one memory server over the network, run `memstack-mcp --http --port 3939` once and point Streamable-HTTP-capable clients at `http://host:3939/mcp` instead of a `command`/`args` pair. See [`packages/mcp/README.md`](packages/mcp/README.md#transport) for details — this is newer than stdio support in the MCP ecosystem, so check your client's docs for Streamable HTTP support before relying on it.
+**Running one shared server instead of one-per-client:** every config above spawns `memstack-mcp` as a local subprocess per client (stdio transport) — fine for one agent per machine, but each client gets its own process and, if using disk/markdown storage, its own file lock. For multiple agents/processes sharing one memory server over the network, run `memstack-mcp --http --port 3939` once (it listens on `127.0.0.1` only and has no authentication; see the transport notes for `--host`) and point Streamable-HTTP-capable clients at `http://host:3939/mcp` instead of a `command`/`args` pair. See [`packages/mcp/README.md`](packages/mcp/README.md#transport) for details — this is newer than stdio support in the MCP ecosystem, so check your client's docs for Streamable HTTP support before relying on it.
 
 ---
 
@@ -182,6 +182,13 @@ share one memory per project. It exposes five tools under their usual names,
   important memories even if the agent never calls `memory_retrieve`. Codex
   runs it after you approve it once with `/hooks`. Skip with `--no-hooks`;
   `memstack disconnect` removes it and restores the file exactly.
+- **Secrets.** `memory_store` refuses content that contains a recognisable
+  credential and replies with the kind (`github-token`, `private-key`,
+  `connection-string`, and so on), never the value. The check runs before the
+  LLM is asked for tags, so the secret never reaches the provider. It is
+  pattern-based and will miss unfamiliar formats. Set
+  `MEMSTACK_SECRET_POLICY=redact` to store the memory with `[REDACTED:<kind>]`
+  in place of the secret, or `off` to skip the check.
 - **Guidance.** The server sends MCP `instructions` telling the agent when to
   recall and remember. Codex gives those little weight, so
   `memstack connect codex` also adds a marked block to `~/.codex/AGENTS.md`
@@ -583,6 +590,7 @@ The default profile is configured by environment variables only. The harness pro
 | `MEMSTACK_EMBED_ON_STORE` | Auto-embed on store | `true` |
 | `MEMSTACK_ACTOR` | Default actor ID (isolates memory per agent). Ignored by the harness profile | `default` |
 | `MEMSTACK_HOME` | Directory holding `config.json` for the harness profile | `~/.memstack` |
+| `MEMSTACK_SECRET_POLICY` | Harness profile: what to do with a memory that contains a credential. `reject` refuses it, `redact` stores it with the secret replaced, `off` skips the check | `reject` |
 | `CLAUDE_PROJECT_DIR` | Project directory for the harness profile; set by Claude Code | working directory |
 
 At least one of `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` is required — the server throws on startup without one (`packages/mcp/src/config.ts:14-22`).

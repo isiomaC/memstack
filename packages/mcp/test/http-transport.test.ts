@@ -23,7 +23,7 @@ describe("MCP Streamable HTTP transport", () => {
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
       try {
-        await fetch("http://localhost:5702/nonexistent");
+        await fetch("http://127.0.0.1:5702/nonexistent");
         return;
       } catch {
         await new Promise((r) => setTimeout(r, 200));
@@ -38,7 +38,7 @@ describe("MCP Streamable HTTP transport", () => {
 
   it("responds to an initialize request over POST /mcp", async () => {
     if (!distAvailable) return;
-    const res = await fetch("http://localhost:5702/mcp", {
+    const res = await fetch("http://127.0.0.1:5702/mcp", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
       body: JSON.stringify({
@@ -56,13 +56,23 @@ describe("MCP Streamable HTTP transport", () => {
 
   it("rejects GET /mcp with 405", async () => {
     if (!distAvailable) return;
-    const res = await fetch("http://localhost:5702/mcp");
+    const res = await fetch("http://127.0.0.1:5702/mcp");
     expect(res.status).toBe(405);
   });
 
   it("returns 404 for unknown paths", async () => {
     if (!distAvailable) return;
-    const res = await fetch("http://localhost:5702/nonexistent");
+    const res = await fetch("http://127.0.0.1:5702/nonexistent");
     expect(res.status).toBe(404);
+  });
+
+  it("binds to the loopback interface by default", async () => {
+    if (!distAvailable) return;
+    const { networkInterfaces } = await import("node:os");
+    const external = Object.values(networkInterfaces())
+      .flat()
+      .find((i) => i && i.family === "IPv4" && !i.internal);
+    if (!external) return; // no non-loopback interface to probe (e.g. a sandbox)
+    await expect(fetch(`http://${external.address}:5702/nonexistent`, { signal: AbortSignal.timeout(2000) })).rejects.toThrow();
   });
 });
