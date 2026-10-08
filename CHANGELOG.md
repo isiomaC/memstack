@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.8.5
 
 ### @memstack/cli, @memstack/mcp, @memstack/core
 
