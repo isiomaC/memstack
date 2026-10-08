@@ -6,12 +6,12 @@
     "url": "https://github.com/isiomaC/memstack",
     "source": "github"
   },
-  "version": "0.8.4",
+  "version": "0.8.5",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@memstack/mcp",
-      "version": "0.8.4",
+      "version": "0.8.5",
       "transport": {
         "type": "stdio"
       }
