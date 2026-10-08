@@ -1227,7 +1227,7 @@ const ms = new MemStack({
 
 ## LongMemEval-S Retrieval Benchmark
 
-MemStack includes a Val benchmark pack for retrieval-only evidence-session recall on the public, cleaned LongMemEval-S split. The runner stores each question's sessions through MemStack's harness memory API, uses the local lexical retriever and in-memory storage, and does not call an answer model or judge. Its recall metrics are not end-to-end QA accuracy and are not directly comparable to the official LongMemEval QA leaderboard. The published dataset is public, not a hidden evaluation set.
+MemStack includes a Val benchmark pack for retrieval-only evidence-session recall on the public, cleaned LongMemEval-S split. The runner stores each question's sessions through MemStack's harness memory API, uses the local lexical retriever and in-memory storage, and does not call an answer model or judge. Secret scanning is disabled only for this benchmark's public corpus in the temporary in-memory store; do not use the runner with private data. Its recall metrics are not end-to-end QA accuracy and are not directly comparable to the official LongMemEval QA leaderboard. The published dataset is public, not a hidden evaluation set.
 
 The dataset is not included in this repository. Validate the pack, then fetch only its explicitly named split with [Val](https://github.com/stalewell/val):
 
