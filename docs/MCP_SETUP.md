@@ -169,6 +169,11 @@ share one memory per project. It exposes five tools under their usual names,
   `memstack project pin <id>` (writes `.memstack.json`; commit it). Recall
   covers the project plus global memories; a memory is written as global only
   when the agent passes `scope: "global"`.
+- **LLM key (optional).** The harness uses the LLM only to tag a memory when
+  it is saved; recall is local keyword ranking and never calls it. Without a
+  key (`memstack init --no-llm`, or no key in the environment) the server still
+  starts, logs one line saying so, and saves memories with only the tags the
+  agent supplies. The default profile and the REST server still require a key.
 - **Safety.** Bulk and destructive tools (`memory_purge_actor`,
   `memory_prune`, `memory_import`, `memory_delete_many`) are not exposed, and
   `memory_get`/`memory_delete` refuse IDs from other projects.
