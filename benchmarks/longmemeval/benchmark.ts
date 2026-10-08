@@ -115,6 +115,9 @@ export async function retrieveQuestionAtK(
     llm: { complete: async () => ({ text: "[]", tokens: { prompt: 0, completion: 0, total: 0 } }) },
     autoTags: false,
     maxContentChars: 1_000_000,
+    // Public benchmark text is indexed only in this in-memory adapter; scanning
+    // can reject literal credential-shaped examples and nothing is sent out.
+    secretPolicy: "off",
   });
   const namespace = projectNamespace(`longmemeval:${question.question_id}`);
   try {

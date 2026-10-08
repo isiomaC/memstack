@@ -126,4 +126,16 @@ describe("LongMemEval retrieval scorer", () => {
     }, [1]);
     expect(result.scores[1]?.recall).toBe(1);
   });
+
+  it("indexes public corpus text that resembles a credential assignment without invoking an external provider", async () => {
+    const result = await retrieveQuestionAtK({
+      question_id: "q-public-corpus",
+      question: "What example configuration was discussed?",
+      haystack_session_ids: ["public-session"],
+      haystack_sessions: [[{ role: "user", content: "The docs used api_key = DEMO-ONLY-9f3a7b2c as an example value." }]],
+      answer_session_ids: ["public-session"],
+    }, [1]);
+
+    expect(result.scores[1]?.recall).toBe(1);
+  });
 });
