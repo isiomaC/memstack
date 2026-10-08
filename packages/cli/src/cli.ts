@@ -52,6 +52,7 @@ async function main() {
       delete: { type: "string" },
       "no-agents-md": { type: "boolean" },
       "no-hooks": { type: "boolean" },
+      "no-llm": { type: "boolean" },
       project: { type: "boolean" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },

@@ -21,8 +21,19 @@ function isMissingModule(error: unknown): boolean {
   return code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND";
 }
 
+/** Stands in when no key is set (harness entry points). Only LLM-dependent calls fail, with a message that says why. */
+const NO_LLM: LLMProvider = {
+  async complete() {
+    throw new Error("No LLM key is configured. Run `memstack init` to add one.");
+  },
+};
+
+function hasLLMKey(env: Env): boolean {
+  return Boolean(env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY);
+}
+
 function buildLLMAdapter(env: Env): LLMProvider {
-  if (!env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY) {
+  if (!hasLLMKey(env)) {
     throw new Error("At least one of OPENAI_API_KEY or ANTHROPIC_API_KEY must be set");
   }
   if (env.ANTHROPIC_API_KEY) {
@@ -108,6 +119,8 @@ export interface EnvConfigResult {
   config: MemStackConfig;
   /** From MEMSTACK_ACTOR, defaults to "default". Only meaningful for clients that scope work to one actor per process (e.g. the MCP server). */
   defaultActorId: string;
+  /** False when no LLM key is set, so `config.llm` is a stand-in that fails if called. Only the file-aware loader allows this. */
+  llmConfigured: boolean;
 }
 
 /**
@@ -116,7 +129,7 @@ export interface EnvConfigResult {
  * wiring and env var behavior can't drift between the three entry points.
  */
 export async function loadConfigFromEnv(): Promise<EnvConfigResult> {
-  return buildConfig(process.env);
+  return buildConfig(process.env, { llmOptional: false });
 }
 
 /**
@@ -124,10 +137,12 @@ export async function loadConfigFromEnv(): Promise<EnvConfigResult> {
  * environment variables. Used by harness entry points. Each section is taken
  * whole from one source: any LLM variable in the environment replaces the
  * file's `llm` section, and `MEMSTACK_STORAGE` replaces its `storage`
- * section, so a key from one provider is never sent to another's URL.
+ * section, so a key from one provider is never sent to another's URL. The key
+ * is optional here: without one, `llmConfigured` is false and memories are
+ * saved without topic tags.
  */
 export async function loadConfig(options: { configPath?: string } = {}): Promise<EnvConfigResult> {
-  return buildConfig(mergeConfigFile(readConfigFile(options.configPath), process.env));
+  return buildConfig(mergeConfigFile(readConfigFile(options.configPath), process.env), { llmOptional: true });
 }
 
 /** The environment with the config file's sections filled in where the environment has none. */
@@ -155,8 +170,9 @@ export function mergeConfigFile(file: MemStackConfigFile | undefined, env: Env):
 
 const LLM_ENV = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "MEMSTACK_OPENAI_BASE_URL", "MEMSTACK_LLM_MODEL"];
 
-async function buildConfig(env: Env): Promise<EnvConfigResult> {
-  const llm = buildLLMAdapter(env);
+async function buildConfig(env: Env, { llmOptional }: { llmOptional: boolean }): Promise<EnvConfigResult> {
+  const llmConfigured = hasLLMKey(env);
+  const llm = llmOptional && !llmConfigured ? NO_LLM : buildLLMAdapter(env);
   const embedding = buildEmbeddingAdapter(env);
   const storage = await buildStorageAdapter(env);
   const embedOnStore = env.MEMSTACK_EMBED_ON_STORE !== "false";
@@ -165,6 +181,7 @@ async function buildConfig(env: Env): Promise<EnvConfigResult> {
   return {
     config: { llm, embedding, storage, defaults: { embedOnStore } },
     defaultActorId,
+    llmConfigured,
   };
 }
 

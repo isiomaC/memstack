@@ -112,7 +112,7 @@
         <span class="step__n"></span>
         <div>
           <h3>Save</h3>
-          <p>Say “remember that…”, or let the agent store a durable fact, decision or rule. MemStack asks your LLM for a few topic tags, so “uses Hono” is found later by “which framework?”. If tagging fails, the memory is still saved.</p>
+          <p>Say “remember that…”, or let the agent store a durable fact, decision or rule. MemStack asks your LLM for a few topic tags, so “uses Hono” is found later by “which framework?”. If tagging fails, or you skip the LLM key, the memory is still saved, just without those tags.</p>
         </div>
         <div class="code-card"><pre><code><span class="t-key">memory_store</span>({
   content: <span class="t-str">"This project uses Hono for the API"</span>,
@@ -145,7 +145,7 @@
         <span class="step__n"></span>
         <div>
           <h3>Stay in control</h3>
-          <p>Agents get no bulk or destructive tools. Your LLM key lives in <code>~/.memstack/config.json</code>, readable only by you, never in agent configs. <code>connect</code> backs up every file it touches and <code>disconnect</code> restores each one exactly.</p>
+          <p>Agents get no bulk or destructive tools. Your LLM key, if you add one, lives in <code>~/.memstack/config.json</code>, readable only by you, never in agent configs. <code>connect</code> backs up every file it touches and <code>disconnect</code> restores each one exactly.</p>
         </div>
         <div class="code-card"><pre><code><span class="t-dim">$</span> memstack connect codex --dry-run
 <span class="t-dim">$</span> memstack disconnect codex</code></pre></div>
@@ -193,7 +193,7 @@ memstack init
 memstack connect claude-code
 memstack doctor</code></pre>
           </div>
-          <p class="mono-note">MemStack never installs storage drivers for you. <code>better-sqlite3</code> is the SQLite driver; pick another store in <code>memstack init</code>.</p>
+          <p class="mono-note">MemStack never installs storage drivers for you. <code>better-sqlite3</code> is the SQLite driver; pick another store in <code>memstack init</code>. The LLM key is optional: <code>memstack init --no-llm</code> skips it, and memories are then saved without topic tags.</p>
         </div>
       </div>
 
@@ -394,7 +394,7 @@ const ctx = await memstack.memory.compileContext({
     <div class="reveal">
       <p class="eyebrow">Reference</p>
       <h2>Seven commands. Five stores.</h2>
-      <p>Run <code class="on-dark">memstack doctor</code> first when something looks wrong. It checks the config file, the LLM key, the storage driver, each agent’s registration, hook and guidance, and starts the server to confirm it answers.</p>
+      <p>Run <code class="on-dark">memstack doctor</code> first when something looks wrong. It checks the config file, the storage driver and, if you set one, the LLM key, each agent’s registration, hook and guidance, and starts the server to confirm it answers.</p>
       <p>Storage drivers are yours to install. MemStack never bundles or auto-installs them, so choose SQLite for one local file, or Postgres to share across machines.</p>
     </div>
     <div class="reveal">
@@ -402,7 +402,7 @@ const ctx = await memstack.memory.compileContext({
         <table class="cmds">
           <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
           <tbody>
-            <tr><td><code>memstack init</code></td><td>Choose an LLM provider and a store. Verifies the key with a real request.</td></tr>
+            <tr><td><code>memstack init</code></td><td>Choose a store and, optionally, an LLM provider. Verifies the key with a real request; <code>--no-llm</code> skips it.</td></tr>
             <tr><td><code>memstack connect &lt;agent&gt;</code></td><td>Registers MemStack with Claude Code or Codex. Checks the server first and undoes everything if a step fails.</td></tr>
             <tr><td><code>memstack disconnect &lt;agent&gt;</code></td><td>Removes what <code>connect</code> added. Your memories are kept.</td></tr>
             <tr><td><code>memstack status</code></td><td>Config, storage, the current project and what each agent has connected.</td></tr>
@@ -532,7 +532,7 @@ start of a task, call memory_retrieve.</code></pre>
       </details>
       <details>
         <summary>Does recalling a memory call an LLM?</summary>
-        <div class="ans"><p>No. Recall is local keyword ranking, so it is fast and works offline. Saving a memory asks your LLM for a few topic tags, and the memory is still saved if that fails.</p></div>
+        <div class="ans"><p>No. Recall is local keyword ranking, so it is fast and works offline. Saving a memory asks your LLM for a few topic tags, and the memory is still saved if that fails. The key is optional: without one, memories are saved without tags and recall works the same.</p></div>
       </details>
       <details>
         <summary>Can an agent store my secrets?</summary>

@@ -62,15 +62,18 @@ async function main() {
 async function runHarness(harness: string | undefined) {
   const cwd = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
   const project = resolveProject(cwd);
-  const { config } = await loadHarnessConfig();
+  const { config, llmConfigured } = await loadHarnessConfig();
   const storage = config.storage ?? new InMemoryStorageAdapter();
+  if (!llmConfigured) {
+    console.error("memstack-mcp: no LLM key configured, so memories are saved without topic tags. Recall is not affected. Run `memstack init` to add a key.");
+  }
   if (storage instanceof InMemoryStorageAdapter) {
     console.error("memstack-mcp: storage is in-memory, so memories are lost when this session ends. Run `memstack init` to choose a store.");
   }
 
   const memory = new HarnessMemory({
     storage,
-    llm: config.llm,
+    llm: llmConfigured ? config.llm : undefined,
     secretPolicy: secretPolicyFromEnv(),
     onError: (error, context) => console.error(`memstack-mcp: ${context}: ${error.message}`),
   });

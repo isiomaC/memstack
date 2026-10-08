@@ -57,7 +57,10 @@ prints a command's flags.
 Every command reads `~/.memstack/config.json`, written by `memstack init`.
 Environment variables override it: any LLM variable replaces its LLM settings,
 and `MEMSTACK_STORAGE` replaces its storage settings. `memstack status` shows
-which source is in use. Without either, set at least an LLM API key:
+which source is in use. The LLM key is optional for the harness (it only tags
+memories as they are saved; recall never uses it): `memstack init --no-llm`
+skips it. Other commands that call the LLM need one. Without a config file,
+set at least an LLM API key:
 
 ```bash
 export OPENAI_API_KEY=sk-...          # OpenAI LLM + embeddings

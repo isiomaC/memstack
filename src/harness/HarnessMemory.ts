@@ -10,8 +10,9 @@ import type { SecretPolicy } from "../security/secrets.js";
 
 export interface HarnessMemoryConfig {
   storage: StorageProvider;
-  llm: LLMProvider;
-  /** Ask the LLM for topic tags on every write. Default true. */
+  /** Tags writes with topic tags. Without one, memories are saved with only the tags the caller supplies. */
+  llm?: LLMProvider;
+  /** Ask the LLM for topic tags on every write. Default true when an `llm` is given. */
   autoTags?: boolean;
   /** Give up on tagging after this long and store the memory untagged. Default 10000. */
   tagTimeoutMs?: number;
@@ -66,7 +67,7 @@ const TAG_PROMPT =
  */
 export class HarnessMemory {
   private storage: StorageProvider;
-  private llm: LLMProvider;
+  private llm?: LLMProvider;
   private retriever: LexicalRetriever;
   private autoTags: boolean;
   private tagTimeoutMs: number;
@@ -79,7 +80,7 @@ export class HarnessMemory {
     this.storage = config.storage;
     this.llm = config.llm;
     this.retriever = new LexicalRetriever(config.storage, { candidateLimit: config.candidateLimit });
-    this.autoTags = config.autoTags ?? true;
+    this.autoTags = config.llm !== undefined && (config.autoTags ?? true);
     this.tagTimeoutMs = config.tagTimeoutMs ?? 10_000;
     this.maxContentChars = config.maxContentChars ?? 8000;
     this.secretPolicy = config.secretPolicy ?? "reject";
@@ -239,7 +240,7 @@ export class HarnessMemory {
         timer = setTimeout(() => reject(new Error(`Tagging timed out after ${this.tagTimeoutMs} ms`)), this.tagTimeoutMs);
       });
       const result = await Promise.race([
-        this.llm.complete({ system: TAG_PROMPT, user: content, maxTokens: ENRICHMENT_MAX_TOKENS, temperature: 0 }),
+        this.llm!.complete({ system: TAG_PROMPT, user: content, maxTokens: ENRICHMENT_MAX_TOKENS, temperature: 0 }),
         timeout,
       ]);
       if (!result.text.trim()) throw new Error("Tagging returned an empty reply");

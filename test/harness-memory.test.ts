@@ -95,6 +95,13 @@ describe("HarnessMemory", () => {
       expect(llm.complete).not.toHaveBeenCalled();
     });
 
+    it("saves without an LLM, with only the tags the caller gave", async () => {
+      const harness = new HarnessMemory({ storage });
+      const memory = await harness.remember({ namespace: "project:abc", content: "Uses Hono", tags: ["Web"], source });
+      expect(memory.content).toBe("Uses Hono");
+      expect(memory.tags).toEqual(["web"]);
+    });
+
     it("defaults kind to observation and importance to 0.5", async () => {
       const harness = new HarnessMemory({ storage, llm: fakeLlm("[]") });
       const memory = await harness.remember({ namespace: "project:abc", content: "Note", source });

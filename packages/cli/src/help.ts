@@ -36,6 +36,7 @@ fails. Safe to run again.
 
   --dry-run        Show what would change without changing it
   --no-hooks       Skip the session-start hook
+  --no-llm         (init) Skip the LLM key; memories are saved without topic tags
   --no-agents-md   Skip the Codex AGENTS.md block
 `,
 

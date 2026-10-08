@@ -146,7 +146,7 @@ SQLITE_PATH=./memory.db
 | `MEMSTACK_EMBED_ON_STORE` | Auto-embed on store (default: true) |
 | `MEMSTACK_ACTOR` | Default actor ID |
 
-At least one of `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` must be set. Anthropic preferred if both are set.
+At least one of `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` must be set. Anthropic preferred if both are set. The one exception is `--profile harness`, which starts without a key and saves memories without topic tags; recall never uses the key.
 
 ### Embeddings (semantic search)
 

@@ -18,7 +18,7 @@
 
 ```bash
 npm install -g @memstack/cli @memstack/mcp better-sqlite3@^11.10.0   # MemStack never installs storage drivers
-memstack init                  # LLM provider + store
+memstack init                  # LLM provider (optional) + store
 memstack connect claude-code
 memstack connect codex
 ```
@@ -281,7 +281,7 @@ every later session.
 
 | Command | What it does |
 |---|---|
-| `memstack init` | Choose an LLM provider and a store. Verifies the key with a real request and writes `~/.memstack/config.json`. Non-interactive: `--provider`, `--base-url`, `--model`, `--api-key-env <VAR>`, `--store`, `--path`, `--url`, `--yes`. |
+| `memstack init` | Choose an LLM provider (optional) and a store. Verifies the key with a real request and writes `~/.memstack/config.json`. Without a key, memories are saved without topic tags and recall works the same. Non-interactive: `--provider`, `--base-url`, `--model`, `--api-key-env <VAR>`, `--no-llm`, `--store`, `--path`, `--url`, `--yes`. |
 | `memstack connect <claude-code\|codex>` | Registers MemStack with the agent. Checks the server works first, and undoes everything if a step fails. `--dry-run` shows the changes; `--no-hooks` and `--no-agents-md` skip those parts. |
 | `memstack disconnect <claude-code\|codex>` | Removes everything `connect` added. Your memories are kept. |
 | `memstack status` | Config, storage, the current project, and what each agent has connected. |

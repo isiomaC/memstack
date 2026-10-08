@@ -228,7 +228,7 @@ text (not JSON).
 
 | Command | Flags | Description |
 |---|---|---|
-| `memstack init` | `--provider openai-compatible\|anthropic`, `--base-url`, `--model`, `--api-key-env <VAR>`, `--store`, `--path`, `--url`, `--yes` | Choose an LLM provider and store; verifies the key with a real request |
+| `memstack init` | `--provider openai-compatible\|anthropic`, `--base-url`, `--model`, `--api-key-env <VAR>`, `--no-llm`, `--store`, `--path`, `--url`, `--yes` | Choose an LLM provider (optional) and store; verifies the key with a real request. `--no-llm` skips the key, so memories are saved without topic tags |
 | `memstack connect <claude-code\|codex>` | `--dry-run`, `--no-hooks`, `--no-agents-md` | Register MemStack, a session-start hook, and (Codex) `AGENTS.md` guidance |
 | `memstack disconnect <claude-code\|codex>` | `--dry-run` | Remove everything `connect` added; memories are kept |
 | `memstack status` | | Where the config comes from (file or environment variables), LLM, storage, current project, and connections |
