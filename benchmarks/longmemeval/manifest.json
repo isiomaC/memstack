@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "val-benchmark-pack/v1",
+  "id": "memstack.longmemeval-s-retrieval",
+  "version": "1.0.0",
+  "title": "MemStack LongMemEval-S retrieval evidence",
+  "description": "Public LongMemEval-S cleaned benchmark pack for measuring retrieval-only evidence-session recall with MemStack's local lexical retriever. This does not measure answer quality.",
+  "license": {
+    "id": "MIT",
+    "name": "MIT License",
+    "url": "https://opensource.org/license/mit",
+    "attribution": "LongMemEval authors: Di Wu, Hongwei Wang, Wenhao Yu, Yuwei Zhang, Kai-Wei Chang, and Dong Yu. LongMemEval: Benchmarking Chat Assistants on Long-Term Interactive Memory, ICLR 2025. Dataset mirror: xiaowu0162/longmemeval-cleaned.",
+    "useNotes": "The upstream dataset card identifies this cleaned dataset as MIT. The data is public, not hidden or access-controlled. MemStack does not redistribute or vendor the dataset; users fetch the pinned upstream file through Val. Preserve the upstream attribution when using the data."
+  },
+  "source": {
+    "repository": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned",
+    "revision": "98d7416c24c778c2fee6e6f3006e7a073259d48f",
+    "dataset": "longmemeval_s_cleaned.json",
+    "task": "Retrieval-only evidence-session recall at explicit K; no answer generation or judge",
+    "contaminationNotes": [
+      "This is a publicly available evaluation dataset and must not be described as hidden or contamination-resistant.",
+      "Retrieval evidence-session recall is not LongMemEval's official end-to-end question-answering accuracy and is not directly comparable to its QA leaderboard."
+    ]
+  },
+  "scorer": {
+    "id": "memstack.longmemeval-evidence-session-recall",
+    "version": "1.0.0",
+    "metrics": [
+      "evidence_session_recall_macro_at_k",
+      "evidence_session_recall_micro_at_k",
+      "evidence_question_hit_rate_at_k",
+      "retrieval_latency_ms_median_at_k",
+      "retrieval_latency_ms_p95_at_k"
+    ]
+  },
+  "requirements": {
+    "network": true,
+    "minimumMemoryMiB": 512,
+    "minimumDiskMiB": 300,
+    "credentials": []
+  },
+  "splits": [
+    {
+      "id": "public-evaluation",
+      "role": "evaluation",
+      "visibility": "public",
+      "assets": [
+        {
+          "path": "longmemeval_s_cleaned.json",
+          "url": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/98d7416c24c778c2fee6e6f3006e7a073259d48f/longmemeval_s_cleaned.json",
+          "sizeBytes": 277383467,
+          "sha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
+          "mediaType": "application/json"
+        }
+      ]
+    }
+  ]
+}

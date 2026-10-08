@@ -87,6 +87,7 @@ Think of it as the open-source alternative to [Mem0](https://mem0.ai/) — plugg
   - [Custom Storage](#custom-storage)
   - [Custom LLM / Embedding](#custom-llm-embedding)
   - [Event Hooks](#event-hooks)
+- [LongMemEval-S Retrieval Benchmark](#longmemeval-s-retrieval-benchmark)
 - [Development](#development)
   - [Setup & Tests](#setup-tests)
   - [Debugging](#debugging)
@@ -1224,6 +1225,28 @@ const ms = new MemStack({
 
 ---
 
+## LongMemEval-S Retrieval Benchmark
+
+MemStack includes a Val benchmark pack for retrieval-only evidence-session recall on the public, cleaned LongMemEval-S split. The runner stores each question's sessions through MemStack's harness memory API, uses the local lexical retriever and in-memory storage, and does not call an answer model or judge. Its recall metrics are not end-to-end QA accuracy and are not directly comparable to the official LongMemEval QA leaderboard. The published dataset is public, not a hidden evaluation set.
+
+The dataset is not included in this repository. Validate the pack, then fetch only its explicitly named split with [Val](https://github.com/stalewell/val):
+
+```bash
+val benchmark validate benchmarks/longmemeval/manifest.json
+val benchmark fetch benchmarks/longmemeval/manifest.json --split public-evaluation
+```
+
+Val prints the SHA-256-addressed cache path. Pass it to the runner; `--limit` is a partial diagnostic run and must not be reported as the full benchmark:
+
+```bash
+pnpm benchmark:longmemeval -- --dataset "$HOME/.cache/val/benchmark-packs/objects/d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442" --limit 5
+pnpm benchmark:longmemeval -- --dataset "$HOME/.cache/val/benchmark-packs/objects/d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442"
+```
+
+The runner rechecks the exact declared size and SHA-256 before reading the file. It streams the JSON dataset, evaluates the default K values 1, 3, 5, and 10, excludes abstention questions marked with the upstream `_abs` question-ID suffix, and prints macro/micro evidence-session recall, question hit rate, and median/p95 retrieval latency. The upstream LongMemEval attribution and license are recorded in the manifest; this pack is not an official LongMemEval result.
+
+---
+
 ## Development
 
 ### Setup & Tests
@@ -1244,6 +1267,7 @@ pnpm verify           # Complete local verification pipeline
 pnpm test:watch       # Watch core tests
 pnpm build:all        # Build core and all workspace packages
 pnpm check:all        # Type-check core and all workspace packages
+pnpm check:benchmark  # Type-check the LongMemEval benchmark runner
 ```
 
 CI exposes a stable `verification` job. Configure that job as a required status check in GitHub branch protection for `main`.
