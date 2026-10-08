@@ -386,3 +386,38 @@ describe("--project and the config file", () => {
     expect(stdout).toMatch(/Storage: +memory \(lost when the process exits\) \(from environment variables\)/);
   });
 });
+
+describe("running without an LLM key", () => {
+  let home: string;
+
+  beforeAll(() => {
+    home = mkdtempSync(join(tmpdir(), "memstack-nokey-"));
+  });
+
+  afterAll(() => {
+    if (home) rmSync(home, { recursive: true, force: true });
+  });
+
+  const env = () => cleanEnv({ MEMSTACK_HOME: home });
+
+  it("init --no-llm saves a config without a key and says tags are skipped", async () => {
+    const { status, stdout, stderr } = await run(["init", "--yes", "--no-llm", "--store", "disk", "--path", join(home, "data")], env());
+    expect(status, stderr).toBe(0);
+    expect(stdout).toContain("No LLM key: memories are saved without topic tags");
+    const saved = JSON.parse(readFileSync(join(home, "config.json"), "utf8"));
+    expect(saved.llm).toBeUndefined();
+    expect(saved.storage.type).toBe("disk");
+  });
+
+  it("status explains that memories are saved without topic tags", async () => {
+    const { status, stdout, stderr } = await run(["status"], env());
+    expect(status, stderr).toBe(0);
+    expect(stdout).toContain("saved without topic tags");
+  });
+
+  it("memory commands that need the LLM still ask for a key", async () => {
+    const { status, stderr } = await run(["store", "--actor", "a", "--content", "x"], env());
+    expect(status).not.toBe(0);
+    expect(stderr).toContain("OPENAI_API_KEY or ANTHROPIC_API_KEY");
+  });
+});

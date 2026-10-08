@@ -62,7 +62,11 @@ export interface HarnessFlags {
   delete?: string;
   "no-agents-md"?: boolean;
   "no-hooks"?: boolean;
+  "no-llm"?: boolean;
 }
+
+/** Shown wherever a missing LLM key matters, so nobody wonders why memories have no tags. */
+const NO_KEY_NOTICE = "ℹ No LLM key: memories are saved without topic tags. Recall works the same. Run `memstack init` to add a key later.";
 
 const out = (line = "") => process.stdout.write(`${line}\n`);
 
@@ -95,38 +99,50 @@ async function init(flags: HarnessFlags): Promise<number> {
   const prompt = interactive ? createPrompter() : undefined;
 
   try {
-    const provider = (flags.provider ?? (await prompt?.choose("LLM provider", ["openai-compatible", "anthropic"], existing?.llm?.provider ?? "openai-compatible")) ?? existing?.llm?.provider ?? "openai-compatible") as "openai-compatible" | "anthropic";
-    if (provider !== "openai-compatible" && provider !== "anthropic") throw new Error('--provider must be "openai-compatible" or "anthropic"');
+    const wantsKey = flags["no-llm"]
+      ? false
+      : prompt && !flags.provider && !flags["api-key-env"]
+        ? (await prompt.choose("Add an LLM key for topic tags? Recall works without one", ["yes", "no"], "yes")) === "yes"
+        : true;
 
-    const sameProvider = existing?.llm?.provider === provider;
-    let baseURL: string | undefined;
-    if (provider === "openai-compatible") {
-      baseURL = flags["base-url"] ?? (await prompt?.ask("Base URL (empty for OpenAI)", sameProvider ? existing?.llm?.baseURL ?? "" : "")) ?? (sameProvider ? existing?.llm?.baseURL : undefined);
-      baseURL = baseURL || undefined;
-    }
-    const model = flags.model ?? (await prompt?.ask("Model (empty for the provider default)", sameProvider ? existing?.llm?.model ?? "" : "")) ?? (sameProvider ? existing?.llm?.model : undefined);
+    let llm: MemStackConfigFile["llm"];
+    if (wantsKey) {
+      const provider = (flags.provider ?? (await prompt?.choose("LLM provider", ["openai-compatible", "anthropic"], existing?.llm?.provider ?? "openai-compatible")) ?? existing?.llm?.provider ?? "openai-compatible") as "openai-compatible" | "anthropic";
+      if (provider !== "openai-compatible" && provider !== "anthropic") throw new Error('--provider must be "openai-compatible" or "anthropic"');
 
-    let apiKey: string | undefined;
-    if (flags["api-key-env"]) {
-      apiKey = process.env[flags["api-key-env"]];
-      if (!apiKey) throw new Error(`Environment variable ${flags["api-key-env"]} is empty.`);
-    } else if (prompt) {
-      apiKey = (await prompt.secret(sameProvider && existing?.llm?.apiKey ? "API key (empty to keep the current one)" : "API key")) || (sameProvider ? existing?.llm?.apiKey : undefined);
-    } else if (sameProvider) {
-      apiKey = existing?.llm?.apiKey;
+      const sameProvider = existing?.llm?.provider === provider;
+      let baseURL: string | undefined;
+      if (provider === "openai-compatible") {
+        baseURL = flags["base-url"] ?? (await prompt?.ask("Base URL (empty for OpenAI)", sameProvider ? existing?.llm?.baseURL ?? "" : "")) ?? (sameProvider ? existing?.llm?.baseURL : undefined);
+        baseURL = baseURL || undefined;
+      }
+      const model = flags.model ?? (await prompt?.ask("Model (empty for the provider default)", sameProvider ? existing?.llm?.model ?? "" : "")) ?? (sameProvider ? existing?.llm?.model : undefined);
+
+      let apiKey: string | undefined;
+      if (flags["api-key-env"]) {
+        apiKey = process.env[flags["api-key-env"]];
+        if (!apiKey) throw new Error(`Environment variable ${flags["api-key-env"]} is empty.`);
+      } else if (prompt) {
+        apiKey = (await prompt.secret(sameProvider && existing?.llm?.apiKey ? "API key (empty to keep the current one)" : "API key")) || (sameProvider ? existing?.llm?.apiKey : undefined);
+      } else if (sameProvider) {
+        apiKey = existing?.llm?.apiKey;
+      }
+      if (apiKey) llm = { provider, apiKey, ...(baseURL ? { baseURL } : {}), ...(model ? { model } : {}) };
     }
-    if (!apiKey) throw new Error("An API key is required. Pass --api-key-env <VAR> to read it from an environment variable.");
 
     const store = (flags.store ?? (await prompt?.choose("Storage", [...STORAGE_TYPES], existing?.storage?.type ?? "sqlite")) ?? existing?.storage?.type ?? "sqlite") as StorageType;
     if (!STORAGE_TYPES.includes(store)) throw new Error(`--store must be one of ${STORAGE_TYPES.join(", ")}`);
     const storage = await storageSettings(store, flags, existing, prompt);
 
-    const llm = { provider, apiKey, ...(baseURL ? { baseURL } : {}), ...(model ? { model } : {}) };
-    out("Checking the LLM provider with a test request...");
-    await checkLLM(buildLLM(llm));
-    out("  ✓ The provider answered.");
+    if (llm) {
+      out("Checking the LLM provider with a test request...");
+      await checkLLM(buildLLM(llm));
+      out("  ✓ The provider answered.");
+    } else {
+      out(NO_KEY_NOTICE);
+    }
 
-    const config: MemStackConfigFile = { version: 1, llm, storage };
+    const config: MemStackConfigFile = { version: 1, ...(llm ? { llm } : {}), storage };
     if (storage.type === "sqlite" && storage.path) mkdirSync(join(storage.path, ".."), { recursive: true, mode: 0o700 });
     writeConfigFile(config);
     out(`Saved ${configFilePath()} (readable only by you).`);
@@ -203,6 +219,8 @@ async function connect(ids: string[], flags: HarnessFlags): Promise<number> {
     throw new Error(`memstack-mcp is not installed. MemStack does not install it for you; run:\n  ${installCommand(file?.storage?.type)}`);
   }
 
+  const { llmConfigured } = await loadConfig();
+  if (!llmConfigured) out(NO_KEY_NOTICE);
   for (const id of ids) {
     const adapter = harnessAdapter(id);
     const launch = harnessLaunch(mcp, adapter.id);
@@ -281,7 +299,7 @@ async function status(): Promise<number> {
     const baseURL = provider === "openai-compatible" ? env.MEMSTACK_OPENAI_BASE_URL : undefined;
     out(`${label("LLM")}${provider}${env.MEMSTACK_LLM_MODEL ? ` (${env.MEMSTACK_LLM_MODEL})` : ""}${baseURL ? ` at ${baseURL}` : ""}${envNote(fromEnv.llm)}`);
   } else if (file || fromEnv.llm) {
-    out(`${label("LLM")}no API key (run \`memstack init\`)`);
+    out(`${label("LLM")}no API key, so memories are saved without topic tags (add one with \`memstack init\`)`);
   }
   if (env.MEMSTACK_STORAGE) out(`${label("Storage")}${describeStorage(env)}${envNote(fromEnv.storage)}`);
 
@@ -373,7 +391,7 @@ async function doctor(flags: HarnessFlags): Promise<number> {
       }
     }
   } else {
-    fail("No LLM key. Run `memstack init`.");
+    out(NO_KEY_NOTICE);
   }
 
   const storageType = (env.MEMSTACK_STORAGE ?? "memory") as StorageType;

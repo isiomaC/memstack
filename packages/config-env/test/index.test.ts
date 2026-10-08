@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { loadConfigFromEnv } from "../src/index.js";
+import { loadConfig, loadConfigFromEnv } from "../src/index.js";
 
 const SAVED_ENV = { ...process.env };
 
@@ -144,5 +144,19 @@ describe("loadConfigFromEnv", () => {
     process.env.MEMSTACK_OPENAI_BASE_URL = "https://api.deepseek.com/v1";
     const { config } = await loadConfigFromEnv();
     expect(config.embedding).toBeUndefined();
+  });
+});
+
+describe("loadConfig without an LLM key", () => {
+  it("builds a config marked llmConfigured: false instead of throwing", async () => {
+    const result = await loadConfig({ configPath: "/nonexistent/memstack/config.json" });
+    expect(result.llmConfigured).toBe(false);
+    await expect(result.config.llm.complete({ system: "s", user: "u" })).rejects.toThrow("No LLM key is configured");
+  });
+
+  it("reports llmConfigured: true when a key is set", async () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    const result = await loadConfig({ configPath: "/nonexistent/memstack/config.json" });
+    expect(result.llmConfigured).toBe(true);
   });
 });

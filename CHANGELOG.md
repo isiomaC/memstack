@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### @memstack/cli, @memstack/mcp, @memstack/core
+
+- The LLM key is optional for the harness. It was only ever used to tag a
+  memory with topic tags when it is saved; recall never calls the LLM.
+  `memstack init` now offers to skip the key (or takes `--no-llm`),
+  `memstack-mcp --profile harness` starts without one, and memories are saved
+  with only the tags the agent supplies. `memstack init`, `connect`, `doctor`
+  and `status` print an info line saying memories are saved without topic tags,
+  and `doctor` no longer counts a missing key as a problem. `HarnessMemory`
+  accepts a config without `llm`. Commands that need the LLM (`store`,
+  `summarize`, and the default MCP profile and REST server) still require a key.
+
 ## v0.8.4
 
 ### @memstack/core
