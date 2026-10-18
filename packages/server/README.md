@@ -21,14 +21,10 @@ node node_modules/@memstack/server/dist/serve.js
 # Bun
 bun run node_modules/@memstack/server/dist/index.js
 
-# Docker, reachable from this computer only
-export MEMSTACK_API_KEY="$(openssl rand -hex 32)"
-docker run --rm -p 127.0.0.1:3000:3000 \
-  -e HOST=0.0.0.0 \
-  -e MEMSTACK_API_KEY \
-  -e MEMSTACK_STORAGE=memory \
-  ghcr.io/isiomac/memstack-server:0.8.5
 ```
+
+For Docker setup and the difference between the container bind and host port,
+see [Bind address and authentication](#bind-address-and-authentication).
 
 Under Node, `dist/serve.js` starts the server explicitly via [`@hono/node-server`](https://github.com/honojs/node-server). Under Bun, `dist/index.js`'s default export (`{ port, fetch }`) is auto-started by the Bun runtime — no extra wiring needed. Both entry points serve the same Hono app, so behavior is identical either way.
 
