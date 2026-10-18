@@ -14,7 +14,7 @@ services:
       POSTGRES_PASSWORD: memstack
       POSTGRES_DB: memstack
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     deploy:
       resources:
         limits:
@@ -30,7 +30,7 @@ services:
   redis:
     image: redis/redis-stack-server@sha256:798ab84d9f266936b034ab11c4d04a2b8e4b441884c5aa7d17ac951eefdf742a
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     deploy:
       resources:
         limits:
@@ -52,8 +52,8 @@ services:
       NEO4J_server_memory_heap_max__size: 256m
       NEO4J_server_memory_pagecache_size: 64m
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
     healthcheck:
       test: ["CMD-SHELL", "cypher-shell -u neo4j -p memstack123 'RETURN 1'"]
       interval: 10s
@@ -65,8 +65,8 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.18.2
     ports:
-      - "6333:6333"   # HTTP API
-      - "6334:6334"   # gRPC
+      - "127.0.0.1:6333:6333"   # HTTP API
+      - "127.0.0.1:6334:6334"   # gRPC
     deploy:
       resources:
         limits:
@@ -87,8 +87,8 @@ services:
       DEFAULT_VECTORIZER_MODULE: "none"
       CLUSTER_HOSTNAME: "node1"
     ports:
-      - "8080:8080"
-      - "50051:50051"
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:50051:50051"
     deploy:
       resources:
         limits:
@@ -103,7 +103,7 @@ services:
   mongodb:
     image: mongo@sha256:8ecb514b00bdcc0bde67ef4e6c330385377a9dc68e24ee94e28c07c891647348
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     environment:
       MONGO_INITDB_DATABASE: memstack
     deploy:
