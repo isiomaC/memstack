@@ -25,12 +25,12 @@ MemStack is a client-side library. The main security considerations are:
 
 - **Data handling** — memories may contain sensitive conversation data; use a storage backend with appropriate access controls in production
 - **API key injection** — LLM and embedding adapter credentials are caller-supplied; never log or serialize the config object
-- **`@memstack/server`** — enable `MEMSTACK_API_KEY` in any non-local deployment; the server has no auth by default
+- **`@memstack/server`** — the server binds to loopback and refuses to bind elsewhere without `MEMSTACK_API_KEY` (or an explicit `MEMSTACK_ALLOW_INSECURE=true`); requests are capped at `MEMSTACK_MAX_BODY_BYTES` (default 5 MiB) and the rate limiter trusts `x-forwarded-for` only with `MEMSTACK_TRUST_PROXY=true`
 
 ### Harness memory (Claude Code and Codex)
 
 - **LLM key.** `memstack init` stores the key in `~/.memstack/config.json`, created with mode `0600` in a `0700` directory, so it never appears in agent configs. Any process running as you can still read it; `memstack doctor` warns if the permissions are broader. Commands never print the key.
 - **Agent configuration.** `memstack connect` changes only MemStack's own entries: the `memstack` MCP server (through each agent's `mcp` commands), a `SessionStart` hook, and for Codex a marked block in `~/.codex/AGENTS.md`. Each file is backed up under `~/.memstack/backups/` first, and `memstack disconnect` restores it exactly. Codex runs the hook only after you approve it with `/hooks`; MemStack does not bypass that.
-- **Memory contents.** Agents are instructed never to store secrets, but memories are not yet scanned for them: whatever an agent stores is saved, and the session-start hook prints the project's most important memories into new sessions. Review stored memories with `memstack memories` and delete with `memstack memories --delete <id>`.
+- **Memory contents.** Agents are instructed never to store secrets, but only the harness `memory_store` path screens for them (`secretPolicy`). The REST server, the CLI and direct library calls store whatever they are given; call `filterSecrets` first if you need that screen. Whatever an agent stores is saved, and the session-start hook prints the project's most important memories into new sessions. Review stored memories with `memstack memories` and delete with `memstack memories --delete <id>`.
 - **Project isolation.** The harness tools take no actor ID: each server is scoped to the project it started in, and `memory_get`/`memory_delete` refuse IDs from other projects. Bulk and destructive tools are not exposed to agents.
 - **Shared stores.** Everyone who can reach a shared store (for example a Postgres database used from several machines) can read its memories. Protect it like any database holding conversation data.
