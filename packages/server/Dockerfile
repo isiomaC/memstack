@@ -9,6 +9,7 @@ RUN sed -i \
       -e '/"@memstack\/config-env": "workspace:\*"/d' package.json \
     && bun install --production
 ENV PORT=3000
+RUN mkdir -p /app/memstack-data && chown bun:bun /app/memstack-data
 USER bun
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
