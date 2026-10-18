@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { timingSafeEqual } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { MemStack } from "@memstack/core";
 import type { MemoryType, MemStackSnapshot } from "@memstack/core";
@@ -18,6 +19,7 @@ import {
   ImportSchema,
 } from "./schemas.js";
 import { buildOpenApiDocument } from "./openapi.js";
+import { getServerOptions } from "./server-options.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as { version: string };
 
@@ -42,13 +44,33 @@ async function parseBody<S extends z.ZodTypeAny>(c: Context, schema: S): Promise
   return { ok: true, data: result.data };
 }
 
+function internalError(c: Context, err: unknown): Response {
+  console.error("MemStack REST request failed", err);
+  return c.json({ error: publicErrorMessage(err) }, 500);
+}
+
+export function publicErrorMessage(_err: unknown): string {
+  return "Internal server error";
+}
+
+function matchesApiKey(auth: string | undefined, apiKey: string): boolean {
+  if (!auth?.startsWith("Bearer ")) return false;
+  const provided = Buffer.from(auth.slice(7));
+  const expected = Buffer.from(apiKey);
+  return provided.length === expected.length && timingSafeEqual(provided, expected);
+}
+
 app.use("*", async (c, next) => {
   const apiKey = process.env.MEMSTACK_API_KEY;
   if (apiKey) {
     const auth = c.req.header("Authorization");
-    if (!auth || auth !== `Bearer ${apiKey}`) {
+    if (!matchesApiKey(auth, apiKey)) {
       return c.json({ error: "Unauthorized" }, 401);
     }
+  } else if (process.env.MEMSTACK_ALLOW_INSECURE !== "true") {
+    const hostname = process.env.HOST || "127.0.0.1";
+    const isLoopback = hostname === "localhost" || hostname === "::1" || hostname.startsWith("127.");
+    if (!isLoopback) return c.json({ error: "Server is missing authentication configuration" }, 503);
   }
   await next();
 });
@@ -92,7 +114,7 @@ app.post("/v1/memories", async (c) => {
     const memory = await (await getMs()).memory.store(parsed.data);
     return c.json(memory, 201);
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -103,7 +125,7 @@ app.post("/v1/memories/batch", async (c) => {
     const result = await (await getMs()).memory.storeBatch(parsed.data.memories);
     return c.json(result, 201);
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -114,7 +136,7 @@ app.post("/v1/memories/retrieve", async (c) => {
     const results = await (await getMs()).memory.retrieve(parsed.data);
     return c.json(results);
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -129,7 +151,7 @@ app.post("/v1/memories/context", async (c) => {
       memoryCount: ctx.recentMemories.length + ctx.importantMemories.length,
     });
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -145,7 +167,7 @@ app.get("/v1/memories/count", async (c) => {
     });
     return c.json({ count });
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -155,7 +177,7 @@ app.get("/v1/memories/export", async (c) => {
     const snapshot = await (await getMs()).export(actorId);
     return c.json(snapshot);
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -165,7 +187,7 @@ app.get("/v1/memories/:id", async (c) => {
     if (!memory) return c.json({ error: "Not found" }, 404);
     return c.json(memory);
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -178,7 +200,7 @@ app.delete("/v1/memories/:id", async (c) => {
     await ms.memory.delete(id);
     return c.json({ deleted: true });
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -189,7 +211,7 @@ app.post("/v1/memories/delete-many", async (c) => {
     const deleted = await (await getMs()).memory.deleteMany(parsed.data.ids);
     return c.json({ deleted });
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -200,7 +222,7 @@ app.post("/v1/memories/purge", async (c) => {
     const count = await (await getMs()).memory.purgeActor(parsed.data.actorId);
     return c.json({ purged: count });
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -211,7 +233,7 @@ app.post("/v1/memories/merge", async (c) => {
     const memory = await (await getMs()).memory.merge(parsed.data.ids);
     return c.json(memory);
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -222,7 +244,7 @@ app.post("/v1/memories/process", async (c) => {
     const result = await (await getMs()).process(parsed.data);
     return c.json(result, 201);
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -231,7 +253,7 @@ app.post("/v1/memories/:id/touch", async (c) => {
     await (await getMs()).memory.touch(c.req.param("id"));
     return c.json({ touched: true });
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -249,7 +271,7 @@ app.post("/v1/memories/import", async (c) => {
     await (await getMs()).import(snapshot);
     return c.json({ imported: memories.length }, 201);
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -263,7 +285,7 @@ app.post("/v1/summarize", async (c) => {
       summaryId: result.summary.id,
     });
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -277,7 +299,7 @@ app.post("/v1/prune", async (c) => {
     const result = await (await getMs()).memory.prune(parsed.data);
     return c.json({ pruned: result.count });
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -291,7 +313,7 @@ app.post("/v1/prune/dry-run", async (c) => {
     const result = await (await getMs()).memory.dryRunPrune(parsed.data);
     return c.json(result);
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -301,7 +323,7 @@ app.get("/v1/stats/:actorId", async (c) => {
     const stats = await (await getMs()).memory.stats(actorId);
     return c.json(stats);
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -329,7 +351,8 @@ app.get("/v1/summarize/stream", async (c) => {
         controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
         controller.close();
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Internal error";
+        console.error("MemStack REST stream failed", err);
+        const msg = publicErrorMessage(err);
         controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ error: msg })}\n\n`));
         controller.close();
       }
@@ -354,7 +377,7 @@ app.get("/health", async (c) => {
       version: pkg.version,
     });
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
+    return internalError(c, err);
   }
 });
 
@@ -367,8 +390,8 @@ setInterval(() => {
   }
 }, 60000).unref();
 
-const port = parseInt(process.env.PORT ?? "3000", 10);
+const { hostname, port } = getServerOptions(process.env);
 
 // Bun and Deno auto-start an HTTP server from this shape when the module is
 // run directly. Node has no equivalent — see serve.ts for the Node entry point.
-export default { port, fetch: app.fetch };
+export default { hostname, port, fetch: app.fetch };

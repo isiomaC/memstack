@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.8.6
+
+### @memstack/server
+
+- Bind to loopback by default and require `MEMSTACK_API_KEY` for non-loopback
+  listeners unless the operator explicitly opts into an insecure test setup.
+- Compare bearer API keys in constant time and return generic server errors
+  while keeping diagnostic details in server logs.
+
+### @memstack/mcp
+
+- Session-start context presents stored memories as untrusted recorded notes,
+  includes harness provenance when available, and defers to the user's current
+  request.
+
+### Documentation and verification
+
+- Document local, Docker, and network REST-server setup and authentication;
+  configure the Docker smoke test with an explicit bind and test key.
+
 ## v0.8.5
 
 ### @memstack/cli, @memstack/mcp, @memstack/core
