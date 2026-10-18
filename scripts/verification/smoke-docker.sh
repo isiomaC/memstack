@@ -6,6 +6,7 @@ image=${MEMSTACK_DOCKER_IMAGE:-memstack-server-smoke:local}
 container_name="memstack-server-smoke-$$"
 temporary_dir=$(mktemp -d "${TMPDIR:-/tmp}/memstack-docker.XXXXXX")
 artifact_dir=${VERIFICATION_ARTIFACT_DIR:-}
+api_key=artifact-smoke-key
 
 cleanup() {
   status=$?
@@ -31,6 +32,8 @@ fi
 
 docker run --detach --name "$container_name" \
   --env OPENAI_API_KEY=artifact-smoke \
+  --env HOST=0.0.0.0 \
+  --env MEMSTACK_API_KEY="$api_key" \
   --env MEMSTACK_STORAGE=disk \
   --env MEMSTACK_EMBED_ON_STORE=false \
   --publish 127.0.0.1::3000 \
@@ -38,16 +41,18 @@ docker run --detach --name "$container_name" \
 
 port=$(docker port "$container_name" 3000/tcp | sed 's/.*://')
 for attempt in $(seq 1 30); do
-  if curl --silent --fail "http://127.0.0.1:$port/health" > "$temporary_dir/health.json"; then break; fi
+  if curl --silent --fail --header "Authorization: Bearer $api_key" "http://127.0.0.1:$port/health" > "$temporary_dir/health.json"; then break; fi
   if ! docker inspect "$container_name" --format '{{.State.Running}}' | grep -q true; then exit 1; fi
   if [ "$attempt" -eq 30 ]; then exit 1; fi
   sleep 1
 done
 
 curl --silent --fail --request POST "http://127.0.0.1:$port/v1/memories" \
+  --header "Authorization: Bearer $api_key" \
   --header "Content-Type: application/json" \
   --data '{"actorId":"docker-test","content":"Docker image smoke"}' > "$temporary_dir/store.json"
 curl --silent --fail --request POST "http://127.0.0.1:$port/v1/memories/retrieve" \
+  --header "Authorization: Bearer $api_key" \
   --header "Content-Type: application/json" \
   --data '{"actorId":"docker-test"}' > "$temporary_dir/retrieve.json"
 node -e 'const fs = require("node:fs"); const rows = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); if (!rows.some((row) => row.content === "Docker image smoke")) process.exit(1)' "$temporary_dir/retrieve.json"
