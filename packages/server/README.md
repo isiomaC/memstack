@@ -7,7 +7,7 @@ REST API server for MemStack — self-hostable agent memory. Runs on Node.js 22+
 ```bash
 npm install @memstack/server
 # or via Docker:
-docker pull ghcr.io/isiomac/memstack-server:0.8.5
+docker pull ghcr.io/isiomac/memstack-server:0.8.6
 ```
 
 ## Quick Start
@@ -74,7 +74,7 @@ docker run --rm -p 127.0.0.1:3000:3000 \
   -e HOST=0.0.0.0 \
   -e MEMSTACK_API_KEY \
   -e MEMSTACK_STORAGE=memory \
-  ghcr.io/isiomac/memstack-server:0.8.5
+  ghcr.io/isiomac/memstack-server:0.8.6
 ```
 
 To publish the container port on the host's network interfaces, use
@@ -180,7 +180,7 @@ docker run -p 3000:3000 \
   -e MEMSTACK_STORAGE=postgres \
   -e DATABASE_URL=postgresql://... \
   -e OPENAI_API_KEY=sk-... \
-  ghcr.io/isiomac/memstack-server:0.8.5
+  ghcr.io/isiomac/memstack-server:0.8.6
 ```
 
 ## License
