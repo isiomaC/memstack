@@ -21,8 +21,13 @@ node node_modules/@memstack/server/dist/serve.js
 # Bun
 bun run node_modules/@memstack/server/dist/index.js
 
-# Docker
-docker run -p 3000:3000 -e MEMSTACK_STORAGE=memory -e OPENAI_API_KEY=sk-... ghcr.io/isiomac/memstack-server:0.8.5
+# Docker (local-only; replace the API key with a strong random value)
+docker run -p 127.0.0.1:3000:3000 \
+  -e HOST=0.0.0.0 \
+  -e MEMSTACK_API_KEY=replace-with-a-strong-random-key \
+  -e MEMSTACK_STORAGE=memory \
+  -e OPENAI_API_KEY=sk-... \
+  ghcr.io/isiomac/memstack-server:0.8.5
 ```
 
 Under Node, `dist/serve.js` starts the server explicitly via [`@hono/node-server`](https://github.com/honojs/node-server). Under Bun, `dist/index.js`'s default export (`{ port, fetch }`) is auto-started by the Bun runtime — no extra wiring needed. Both entry points serve the same Hono app, so behavior is identical either way.
@@ -43,11 +48,21 @@ All via environment variables.
 | `MEMSTACK_OPENAI_BASE_URL` | Custom API endpoint (DeepSeek, etc) | `https://api.openai.com/v1` |
 | `MEMSTACK_LLM_MODEL` | Model override | `gpt-4o-mini` |
 | `MEMSTACK_EMBED_ON_STORE` | Auto-embed on store | `true` |
-| `MEMSTACK_API_KEY` | Bearer token auth (optional) | — |
+| `MEMSTACK_API_KEY` | Bearer token auth (required for non-loopback binds) | — |
+| `HOST` | Bind address | `127.0.0.1` |
+| `MEMSTACK_ALLOW_INSECURE` | Permit a non-loopback bind without an API key (`true` only) | `false` |
 | `MEMSTACK_RATE_LIMIT` | Requests/minute limit | 0 (disabled) |
 | `PORT` | HTTP port | 3000 |
 
 ## API Endpoints
+
+The server binds to `127.0.0.1` by default. Binding to a non-loopback address
+requires `MEMSTACK_API_KEY`; set `HOST=0.0.0.0` only when you intend the server
+to be reachable through its container or network interface. Every request must
+then include `Authorization: Bearer <key>`. `MEMSTACK_ALLOW_INSECURE=true`
+explicitly disables this startup safeguard and is intended only for isolated
+local testing. The REST API is a single-tenant service for trusted callers;
+the shared API key does not bind callers to an actor.
 
 The server exposes 20 operational routes plus the generated OpenAPI document endpoint.
 

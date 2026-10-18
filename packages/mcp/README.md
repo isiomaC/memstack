@@ -85,7 +85,9 @@ memstack init && memstack connect claude-code && memstack connect codex
 installs it as a `SessionStart` hook in Claude Code and Codex, so each new
 session starts with them. It reads the harness's hook input from stdin, makes
 no LLM call, and on any error prints nothing and exits 0, so it never blocks
-a session.
+a session. Hook output labels entries as untrusted recorded notes, includes
+the harness that saved each entry when known, and asks the agent to follow the
+user's current request rather than treating stored text as instructions.
 
 ## Configuration
 
