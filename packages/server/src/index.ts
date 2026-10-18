@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { timingSafeEqual } from "node:crypto";
 import { Hono, type Context } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { MemStack } from "@memstack/core";
 import type { MemoryType, MemStackSnapshot } from "@memstack/core";
 import type { z } from "zod";
@@ -19,7 +20,7 @@ import {
   ImportSchema,
 } from "./schemas.js";
 import { buildOpenApiDocument } from "./openapi.js";
-import { getServerOptions } from "./server-options.js";
+import { getServerOptions, isLoopbackHost } from "./server-options.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as { version: string };
 
@@ -60,6 +61,9 @@ function matchesApiKey(auth: string | undefined, apiKey: string): boolean {
   return provided.length === expected.length && timingSafeEqual(provided, expected);
 }
 
+const MAX_BODY_BYTES = parseInt(process.env.MEMSTACK_MAX_BODY_BYTES ?? "5242880", 10);
+app.use("*", bodyLimit({ maxSize: MAX_BODY_BYTES, onError: (c) => c.json({ error: "Payload too large" }, 413) }));
+
 app.use("*", async (c, next) => {
   const apiKey = process.env.MEMSTACK_API_KEY;
   if (apiKey) {
@@ -69,8 +73,7 @@ app.use("*", async (c, next) => {
     }
   } else if (process.env.MEMSTACK_ALLOW_INSECURE !== "true") {
     const hostname = process.env.HOST || "127.0.0.1";
-    const isLoopback = hostname === "localhost" || hostname === "::1" || hostname.startsWith("127.");
-    if (!isLoopback) return c.json({ error: "Server is missing authentication configuration" }, 503);
+    if (!isLoopbackHost(hostname)) return c.json({ error: "Server is missing authentication configuration" }, 503);
   }
   await next();
 });
@@ -81,7 +84,8 @@ app.use("*", async (c, next) => {
   const rateLimit = parseInt(process.env.MEMSTACK_RATE_LIMIT ?? "0", 10);
   if (rateLimit <= 0) return next();
 
-  const key = c.req.header("x-forwarded-for") ?? "anonymous";
+  // x-forwarded-for is client-controlled; only honour it behind a proxy you operate.
+  const key = (process.env.MEMSTACK_TRUST_PROXY === "true" && c.req.header("x-forwarded-for")) || "anonymous";
   const now = Date.now();
   const entry = requestCounts.get(key) ?? { count: 0, reset: now + 60000 };
 

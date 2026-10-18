@@ -6,12 +6,12 @@ const isoDate = z.string().datetime({ offset: true }).or(z.string().date()).tran
 
 export const StoreMemorySchema = z.object({
   actorId: z.string().min(1),
-  content: z.string().min(1),
+  content: z.string().min(1).max(100_000),
   memoryType: MemoryTypeSchema.optional(),
   importance: z.number().min(0).max(1).optional(),
   emotionalValence: z.number().min(-1).max(1).optional(),
-  tags: z.array(z.string()).optional(),
-  embedding: z.array(z.number()).optional(),
+  tags: z.array(z.string().max(200)).max(50).optional(),
+  embedding: z.array(z.number()).max(8192).optional(),
   sourceId: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   expiresAt: isoDate.optional(),
@@ -20,14 +20,14 @@ export const StoreMemorySchema = z.object({
 });
 
 export const BatchStoreSchema = z.object({
-  memories: z.array(StoreMemorySchema).min(1),
+  memories: z.array(StoreMemorySchema).min(1).max(500),
 });
 
 export const RetrieveSchema = z.object({
   actorId: z.string().optional(),
   query: z.string().optional(),
   memoryTypes: z.array(MemoryTypeSchema).optional(),
-  tags: z.array(z.string()).optional(),
+  tags: z.array(z.string().max(200)).max(50).optional(),
   limit: z.number().int().positive().optional(),
   strategy: z.enum(["semantic", "hybrid", "recent", "important"]).optional(),
   createdAfter: isoDate.optional(),
@@ -44,11 +44,11 @@ export const ContextSchema = z.object({
 
 export const ProcessSchema = z.object({
   actorId: z.string().min(1),
-  content: z.string().min(1),
+  content: z.string().min(1).max(100_000),
   memoryType: MemoryTypeSchema.optional(),
   importance: z.number().min(0).max(1).optional(),
   emotionalValence: z.number().min(-1).max(1).optional(),
-  tags: z.array(z.string()).optional(),
+  tags: z.array(z.string().max(200)).max(50).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   expiresAt: isoDate.optional(),
   onConflict: z.literal("append").optional(),
