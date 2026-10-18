@@ -21,12 +21,12 @@ node node_modules/@memstack/server/dist/serve.js
 # Bun
 bun run node_modules/@memstack/server/dist/index.js
 
-# Docker (local-only; replace the API key with a strong random value)
-docker run -p 127.0.0.1:3000:3000 \
+# Docker, reachable from this computer only
+export MEMSTACK_API_KEY="$(openssl rand -hex 32)"
+docker run --rm -p 127.0.0.1:3000:3000 \
   -e HOST=0.0.0.0 \
-  -e MEMSTACK_API_KEY=replace-with-a-strong-random-key \
+  -e MEMSTACK_API_KEY \
   -e MEMSTACK_STORAGE=memory \
-  -e OPENAI_API_KEY=sk-... \
   ghcr.io/isiomac/memstack-server:0.8.5
 ```
 
@@ -54,15 +54,53 @@ All via environment variables.
 | `MEMSTACK_RATE_LIMIT` | Requests/minute limit | 0 (disabled) |
 | `PORT` | HTTP port | 3000 |
 
-## API Endpoints
+## Bind address and authentication
 
-The server binds to `127.0.0.1` by default. Binding to a non-loopback address
-requires `MEMSTACK_API_KEY`; set `HOST=0.0.0.0` only when you intend the server
-to be reachable through its container or network interface. Every request must
-then include `Authorization: Bearer <key>`. `MEMSTACK_ALLOW_INSECURE=true`
-explicitly disables this startup safeguard and is intended only for isolated
-local testing. The REST API is a single-tenant service for trusted callers;
-the shared API key does not bind callers to an actor.
+The server listens on `127.0.0.1` by default. This is suitable for a local
+process and does not require an API key. For a local Node.js or Bun process:
+
+```bash
+npx @memstack/server
+```
+
+To accept connections through a container or another network interface, set
+`HOST` to a non-loopback address and provide `MEMSTACK_API_KEY`. The server
+refuses a non-loopback bind without a key unless you explicitly set
+`MEMSTACK_ALLOW_INSECURE=true` (for isolated testing only).
+
+For Docker, the bind address inside the container and the published host port
+are separate settings. This example lets only processes on the host computer
+reach the service:
+
+```bash
+export MEMSTACK_API_KEY="$(openssl rand -hex 32)"
+docker run --rm -p 127.0.0.1:3000:3000 \
+  -e HOST=0.0.0.0 \
+  -e MEMSTACK_API_KEY \
+  -e MEMSTACK_STORAGE=memory \
+  ghcr.io/isiomac/memstack-server:0.8.5
+```
+
+To publish the container port on the host's network interfaces, use
+`-p 3000:3000` instead. Keep the key private and restrict network access; use
+a TLS-terminating proxy when clients connect over an untrusted network.
+
+When `MEMSTACK_API_KEY` is set, every HTTP request, including `/health`, must
+include it as a bearer token:
+
+```bash
+curl http://127.0.0.1:3000/health \
+  -H "Authorization: Bearer $MEMSTACK_API_KEY"
+```
+
+Unexpected server errors return a generic `500` response; diagnostic details
+are written to the server logs.
+
+The key is supplied by the operator at process startup; MemStack does not
+generate it or store it in a database. The REST API uses one shared key for
+trusted callers and does not bind keys to individual actors.
+
+## API Endpoints
 
 The server exposes 20 operational routes plus the generated OpenAPI document endpoint.
 
@@ -111,6 +149,10 @@ curl -X POST http://localhost:3000/v1/memories \
 Note: `POST /v1/prune` and `/v1/prune/dry-run` support every `PruneStrategy` type except `"custom"` — a custom prune strategy is a JavaScript predicate function, which can't be expressed in JSON. Use the `@memstack/core` library directly for custom prune logic.
 
 ## Usage Examples
+
+These examples assume the default loopback bind with no API key. If
+`MEMSTACK_API_KEY` is set, add `-H "Authorization: Bearer $MEMSTACK_API_KEY"`
+to each request.
 
 ```bash
 # Health check

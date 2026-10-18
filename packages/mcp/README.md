@@ -89,6 +89,12 @@ a session. Hook output labels entries as untrusted recorded notes, includes
 the harness that saved each entry when known, and asks the agent to follow the
 user's current request rather than treating stored text as instructions.
 
+There is no extra setting for this behavior. Install or update `@memstack/mcp`
+and register the hook with `memstack connect claude-code` and/or
+`memstack connect codex`. If a memory has no harness provenance, its line
+omits the “saved via” label. The hook displays stored content as context; it
+does not change or rewrite the saved memory.
+
 ## Configuration
 
 The default profile is configured by environment variables only. The harness
