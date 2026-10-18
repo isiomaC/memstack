@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile, readdir, open, unlink, rename, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Memory, MemoryType } from "../../types.js";
 import type { StorageProvider, MemoryStoreInput, MemoryRetrieveQuery, MemoryCountFilter, StorageCapabilities } from "../../interfaces.js";
@@ -24,7 +25,7 @@ export class DiskStorageAdapter implements StorageProvider {
   }
 
   async initialize(): Promise<void> {
-    await mkdir(this.dir, { recursive: true });
+    await mkdir(this.dir, { recursive: true, mode: 0o700 });
     await this._buildIndex();
   }
 
@@ -190,7 +191,7 @@ export class DiskStorageAdapter implements StorageProvider {
     for (const actorId of actorIds) {
       let records = await this._readFile(actorId);
       const now = new Date();
-      records = records.filter((r) => !r.expiresAt || new Date(r.expiresAt) > now);
+      records = records.filter((r) => (!query.actorId || r.actorId === query.actorId) && (!r.expiresAt || new Date(r.expiresAt) > now));
 
       if (query.memoryTypes && query.memoryTypes.length > 0) {
         records = records.filter((r) => query.memoryTypes!.includes(r.memoryType));
@@ -260,7 +261,7 @@ export class DiskStorageAdapter implements StorageProvider {
 
     for (const actorId of actorIds) {
       let records = await this._readFile(actorId);
-      records = records.filter((r) => !r.expiresAt || new Date(r.expiresAt) > now);
+      records = records.filter((r) => (!filter?.actorId || r.actorId === filter.actorId) && (!r.expiresAt || new Date(r.expiresAt) > now));
 
       if (filter?.memoryType) {
         records = records.filter((r) => r.memoryType === filter.memoryType);
@@ -296,7 +297,9 @@ export class DiskStorageAdapter implements StorageProvider {
 
   private _filePath(actorId: string): string {
     const safe = actorId.replace(/[^a-zA-Z0-9_\-.,@]/g, "_");
-    return join(this.dir, `${safe}.json`);
+    // Ids that needed sanitising get a hash suffix so "a/b" and "a_b" never share a file.
+    const name = safe === actorId ? safe : `${safe}-${createHash("sha256").update(actorId).digest("hex").slice(0, 8)}`;
+    return join(this.dir, `${name}.json`);
   }
 
   private async _readFile(actorId: string): Promise<MemoryRecord[]> {
@@ -317,7 +320,7 @@ export class DiskStorageAdapter implements StorageProvider {
     // take the write lock) never observes a partially-written file.
     const tmpPath = `${filePath}.${process.pid}.${Date.now().toString(36)}.tmp`;
     try {
-      await writeFile(tmpPath, JSON.stringify(records, null, 2), "utf-8");
+      await writeFile(tmpPath, JSON.stringify(records, null, 2), { encoding: "utf-8", mode: 0o600 });
       await rename(tmpPath, filePath);
     } catch (err) {
       await unlink(tmpPath).catch(() => {});
@@ -365,7 +368,7 @@ export class DiskStorageAdapter implements StorageProvider {
 
     while (true) {
       try {
-        const handle = await open(lockPath, "wx");
+        const handle = await open(lockPath, "wx", 0o600);
         await handle.close();
         return async () => {
           await unlink(lockPath).catch(() => {});

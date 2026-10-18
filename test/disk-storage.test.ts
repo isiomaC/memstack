@@ -150,4 +150,19 @@ describe("DiskStorageAdapter", () => {
     const contents = results.map((m) => m.content).sort();
     expect(contents).toEqual(Array.from({ length: 10 }, (_, i) => `memory ${i}`).sort());
   });
+
+  it("keeps actor ids that sanitise to the same name in separate files", async () => {
+    await storage.store({ actorId: "a/b", content: "slash" });
+    await storage.store({ actorId: "a_b", content: "underscore" });
+
+    expect((await storage.retrieve({ actorId: "a/b" })).map((m) => m.content)).toEqual(["slash"]);
+    expect((await storage.retrieve({ actorId: "a_b" })).map((m) => m.content)).toEqual(["underscore"]);
+    expect(await storage.count({ actorId: "a/b" })).toBe(1);
+  });
+
+  it("writes memory files readable only by the owner", async () => {
+    await storage.store({ actorId: "npc_1", content: "private" });
+    const { stat } = await import("node:fs/promises");
+    expect((await stat(join(TEST_DIR, "npc_1.json"))).mode & 0o077).toBe(0);
+  });
 });
