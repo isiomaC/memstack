@@ -21,7 +21,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install Val
-        run: npm install --global @stlw/val@0.1.1
+        run: npm install --global @stlw/val@1.0.0
       - name: Install MemStack dependencies
         run: pnpm install --frozen-lockfile
       - name: Run Val artifact evidence
